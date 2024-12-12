@@ -1,0 +1,34 @@
+services:
+  peer1:
+    container_name: peer1
+    build: .
+    environment:
+      - DISPLAY=:0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    networks:
+      - cse471
+
+  peer2:
+    container_name: peer2
+    build: .
+    environment:
+      - DISPLAY=:0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    networks:
+      - cse471
+
+  peer3:
+    container_name: peer3
+    build: .
+    environment:
+      - DISPLAY=:0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    networks:
+      - cse471
+
+networks:
+  cse471:
+    name: cse471
