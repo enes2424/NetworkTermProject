@@ -14,11 +14,14 @@ import java.util.Comparator;
 
 public class FolderComparison {
 
-    public static List<List<String>> getAllFileHashes(File folder) throws IOException, NoSuchAlgorithmException {
+    public static List<List<String>> getAllFileHashes(Path baseFolderPath, File folder) throws IOException, NoSuchAlgorithmException {
         ArrayList<String> paths = new ArrayList<>();
         ArrayList<String> hashes = new ArrayList<>();
-        List<File> files = getAllFiles(folder);
-        Path baseFolderPath = folder.toPath();
+        List<File> files;
+        if (folder.isDirectory())
+            files = getAllFiles(folder);
+        else
+            files = List.of(folder);
 
         for (File file : files) {
             Path filePath = file.toPath();

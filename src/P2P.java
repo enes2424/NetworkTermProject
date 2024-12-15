@@ -62,13 +62,17 @@ public class P2P extends JFrame {
 	private JButton						set2Button = new JButton("Set");
 	private JFileChooser				folderChooser = new JFileChooser();
 	private boolean						isConnect = false;
+	private JLabel						downloadingFiles = new JLabel("Downloading files:");
+	private DefaultListModel<String>	listModel1 = new DefaultListModel<>();
+	private JScrollPane					scrollPane1 = new JScrollPane(new JList<>(listModel1));
 	private JLabel						foundFiles = new JLabel("Found files:");
-	private DefaultListModel<String>	listModel = new DefaultListModel<>();
-	private List<List<List<String>>>	listIDs = new ArrayList<>();
-    private JList<String>				list = new JList<>(listModel);
+	private DefaultListModel<String>	listModel2 = new DefaultListModel<>();
+    private JList<String>				list = new JList<>(listModel2);
+	private JScrollPane					scrollPane2 = new JScrollPane(list);
+	private List<String>				listID = new ArrayList<>();
+	private	List<Long>					listByte = new ArrayList<>();
 	private Gson                		gson = new Gson();
-    private JScrollPane					scrollPane;
-	private P2P							self = this;
+	private boolean						isValid = false;
 
 	static {
 		try { 
@@ -88,7 +92,7 @@ public class P2P extends JFrame {
 			System.out.println("Closing operation is being performed...");
 			System.exit(0);
 		}
-		int response = JOptionPane.showConfirmDialog(self, 
+		int response = JOptionPane.showConfirmDialog(P2P.this, 
 			"Are you sure you want to close the application?", 
 			"Close", 
 			JOptionPane.YES_NO_OPTION);
@@ -114,7 +118,7 @@ public class P2P extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                self.windowClosing();
+                P2P.this.windowClosing();
             }
         });
 
@@ -180,22 +184,48 @@ public class P2P extends JFrame {
 		set2Button.setFont(new Font("Tahoma", Font.BOLD, 9));
 		set2Button.setBounds(420, 100, 50, 25);
 		add(set2Button);
+
+		downloadingFiles.setFont(new Font("Tahoma", Font.BOLD, 13));
+		downloadingFiles.setBounds(20, 130, 500, 25);
+		add(downloadingFiles);
+
+        scrollPane1.setBounds(20, 160, 450, 150);
+        add(scrollPane1);
 		
 		foundFiles.setFont(new Font("Tahoma", Font.BOLD, 13));
-		foundFiles.setBounds(20, 130, 500, 25);
+		foundFiles.setBounds(20, 330, 500, 25);
 		add(foundFiles);
 
-        scrollPane = new JScrollPane(list);
-        scrollPane.setBounds(20, 160, 450, 150);
-        add(scrollPane);
+        scrollPane2.setBounds(20, 360, 450, 150);
+        add(scrollPane2);
         
         list.addListSelectionListener(new ListSelectionListener() {
             @Override
             public void valueChanged(ListSelectionEvent e) {
                 if (!e.getValueIsAdjusting()) {
-                    String selectedItem = list.getSelectedValue();
-                    if (selectedItem != null)
-                        System.out.println("Tiklanan dosya: " + selectedItem);
+                    String	selectedItem = list.getSelectedValue();
+					int		selectedIndex = list.getSelectedIndex();
+                    if (selectedItem == null || selectedIndex == -1)
+						return ;
+					selectedItem = selectedItem.substring(0, selectedItem.indexOf(" from "));
+                    System.out.println("Clicked file: " + selectedItem);
+					if (isValid) {
+						int response = JOptionPane.showConfirmDialog(P2P.this, 
+							"Do you want to download file " + selectedItem + "?", 
+							"Download",
+							JOptionPane.YES_NO_OPTION);
+					
+						if (response == JOptionPane.YES_OPTION) {
+							try {
+								peer.sendRequest(listID.get(selectedIndex));
+							} catch (IOException err) {
+								System.out.println("Download cancelled!");
+							}
+						} else
+							System.out.println("Download cancelled!");
+					} else {
+						JOptionPane.showMessageDialog(P2P.this, "No suitable destination folder found!", "Download Cancelled", JOptionPane.WARNING_MESSAGE);
+					}
                 }
             }
         });
@@ -251,10 +281,10 @@ public class P2P extends JFrame {
 		File directory = new File(textField2.getText());
 		if (directory.exists() && directory.isDirectory()) {
 			textField2.setForeground(Color.BLACK);
-			return true;
+			return isValid = true;
 		}
 		textField2.setForeground(Color.RED);
-		return false;
+		return isValid = false;
 	}
 
 	public	String getMessage() {
@@ -263,41 +293,58 @@ public class P2P extends JFrame {
 		return textField1.getText();
 	}
 
+	public static String formatBytes(String byteStr) {
+        String[] units = {"B", "KB", "MB", "GB", "TB"};
+        int index = 0;
+        double size = Long.parseLong(byteStr);
+
+        while (size >= 1024 && index < units.length - 1) {
+            size /= 1024.0;
+            index++;
+        }
+
+        return String.format("%.2f %s", size, units[index]);
+	}
+
 	public	void addElementToFoundList(String address, String receivedMessage) {
 		if (address.substring(1).equals(selfAddress))
 			return ;
 		if (receivedMessage.equals("")) {
-			for (int i = 0; i < listModel.getSize(); i++)
-				if (listModel.getElementAt(i).contains(address)) {
-					listIDs.remove(i);
-					listModel.remove(i--);
+			for (int i = 0; i < listModel2.getSize(); i++)
+				if (listModel2.getElementAt(i).contains(address)) {
+					listID.remove(i);
+					listByte.remove(i);
+					listModel2.remove(i--);
 				}
 			return ;
 		}
 
 		String[]			filesAndJsons = receivedMessage.split(";");
 		String[]			files = filesAndJsons[0].split(",");
-		String[]			jsons = filesAndJsons[1].split("\\|");
+		String[]			bytes = filesAndJsons[1].split(",");
+		String[]			jsons = filesAndJsons[2].split("\\|");
 		int					size = files.length;
 		int					index = 0;
 
-		for (int i = 0; i < listModel.getSize(); i++) {
-			if (listModel.getElementAt(i).contains(address)) {
+		for (int i = 0; i < listModel2.getSize(); i++) {
+			if (listModel2.getElementAt(i).contains(address)) {
 				if (index == size) {
-					listIDs.remove(i);
-					listModel.remove(i--);
+					listID.remove(i);
+					listByte.remove(i);
+					listModel2.remove(i--);
 				} else {
-					System.out.println(gson.fromJson(jsons[i], List.class));
-					listIDs.set(i, gson.fromJson(jsons[index], List.class));
-					listModel.set(i, files[index++] + " from " + address);
+					listID.set(i, jsons[index]);
+					listByte.set(i, Long.parseLong(bytes[index]));
+					listModel2.set(i, files[index] + " " + formatBytes(bytes[index++]) + " from " + address);
 				}
 			}
 		}
 
 		for (int i = index; i < size; i++) {
 			System.out.println(gson.fromJson(jsons[i], List.class));
-			listIDs.add(gson.fromJson(jsons[i], List.class));
-			listModel.addElement(files[i] + " from " + address);
+			listID.add(jsons[i]);
+			listByte.add(Long.parseLong(bytes[i]));
+			listModel2.addElement(files[i] + " " + formatBytes(bytes[i]) + " from " + address);
 		}
 	}
 	
@@ -318,7 +365,7 @@ public class P2P extends JFrame {
 	        	if (isConnect) {
 		        	isConnect = false;
 		            statusLabel.setIcon(redCircle);
-					listModel.clear();
+					listModel2.clear();
 		            peer.disconnect();
 	        	}
 	        }

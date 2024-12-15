@@ -28,7 +28,6 @@ public class UDPFlooding {
         this.running = false;
     }
 
-
     public void connect() {
     	this.running = true;
     	new Thread(this::startSender).start();
@@ -46,6 +45,15 @@ public class UDPFlooding {
     	receiverSocket.close();
     }
 
+    public void sendRequest(String message) throws IOException {
+        byte[] buffer = ("REQUEST " + message).getBytes();
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length,
+                InetAddress.getByName(BROADCAST_ADDRESS), PORT);
+
+        senderSocket.send(packet);
+        System.out.println("Broadcast message sent: " + message);
+    }
+
     private void sendFoundFiles(String message) throws IOException {
         byte[] buffer = ("FOUND " + message).getBytes();
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length,
@@ -53,6 +61,18 @@ public class UDPFlooding {
 
         senderSocket.send(packet);
         System.out.println("Broadcast message sent: " + message);
+    }
+
+    long    calculateByte(File file) {
+        if (file.isFile())
+            return file.length();
+
+        long    len = 0;
+        File[]  files = file.listFiles();
+
+        for (File f : files)
+            len += calculateByte(f);
+        return len;
     }
 
     private void startSender() {
@@ -73,8 +93,13 @@ public class UDPFlooding {
                     }
                     sb.append(';');
                     for (File file : files) {
+                        sb.append(calculateByte(file));
+                        sb.append(',');
+                    }
+                    sb.append(';');
+                    for (File file : files) {
                         try {
-                            String jsonData = gson.toJson(FolderComparison.getAllFileHashes(file));
+                            String jsonData = gson.toJson(FolderComparison.getAllFileHashes(baseFolderPath, file));
                             sb.append(jsonData);
                             sb.append('|');
                         } catch (IOException | NoSuchAlgorithmException e) {
@@ -109,8 +134,9 @@ public class UDPFlooding {
                     // packet.getAddress() bazen ipv6 olarak geliyor onu duzelt
                     System.out.println("Message received: " + receivedMessage + " from " + packet.getAddress());
                     p2p.addElementToFoundList(packet.getAddress().toString(), receivedMessage);
-                } else if (receivedMessage.startsWith("DOWNLOAD ")) {
-
+                } else if (receivedMessage.startsWith("REQUEST ")) {
+                    receivedMessage = receivedMessage.substring(8);
+                    System.out.println(receivedMessage);
                 }
             }
             System.out.println("Close receiver socket");
