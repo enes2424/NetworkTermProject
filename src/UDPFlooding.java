@@ -7,15 +7,21 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 
+import com.google.gson.Gson;
+
+import java.security.NoSuchAlgorithmException;
+
 public class UDPFlooding {
-    private static final int PORT = 9876;
+    private static final int    PORT = 9876;
     private static final String BROADCAST_ADDRESS = "255.255.255.255";
-    private DatagramSocket	senderSocket;
-    private DatagramSocket	receiverSocket;
-    private byte[]          buffer = new byte[8192];
-    private DatagramPacket  packet = new DatagramPacket(buffer, buffer.length);
-    private boolean			running;
-    private P2P				p2p;
+    private static final int    CHUNK_SIZE = 256 * 1024 + 1024;
+    private DatagramSocket	    senderSocket;
+    private DatagramSocket	    receiverSocket;
+    private byte[]              buffer = new byte[CHUNK_SIZE];
+    private DatagramPacket      packet = new DatagramPacket(buffer, buffer.length);
+    private boolean			    running;
+    private Gson                gson = new Gson();
+    private P2P				    p2p;
 
     public UDPFlooding(P2P p2p) {
     	this.p2p = p2p;
@@ -31,7 +37,7 @@ public class UDPFlooding {
     
     public void	disconnect() {
         try {
-            send("");
+            sendFoundFiles("");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -40,8 +46,8 @@ public class UDPFlooding {
     	receiverSocket.close();
     }
 
-    private void send(String message) throws IOException {
-        byte[] buffer = message.getBytes();
+    private void sendFoundFiles(String message) throws IOException {
+        byte[] buffer = ("FOUND " + message).getBytes();
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length,
                 InetAddress.getByName(BROADCAST_ADDRESS), PORT);
 
@@ -54,7 +60,7 @@ public class UDPFlooding {
         	senderSocket = new DatagramSocket();
         	senderSocket.setBroadcast(true);
 
-            while (running) {
+            x: while (running) {
                 String message = p2p.getMessage();
                 if (!message.equals("")) {
                     File folder = new File(message);
@@ -65,9 +71,20 @@ public class UDPFlooding {
                         sb.append(baseFolderPath.relativize(file.toPath()).toString());
                         sb.append(',');
                     }
-                    send(sb.toString());
+                    sb.append(';');
+                    for (File file : files) {
+                        try {
+                            String jsonData = gson.toJson(FolderComparison.getAllFileHashes(file));
+                            sb.append(jsonData);
+                            sb.append('|');
+                        } catch (IOException | NoSuchAlgorithmException e) {
+                            System.err.println("An error occurred: " + e.getMessage());
+                            continue x;
+                        }
+                    }
+                    sendFoundFiles(sb.toString());
                 } else
-                    send("");
+                    sendFoundFiles("");
                 for (int i = 0; running && i < 10; i++)
                 	Thread.sleep(300);
             }
@@ -87,9 +104,14 @@ public class UDPFlooding {
             while (running) {
             	receiverSocket.receive(packet);
                 String receivedMessage = new String(packet.getData(), 0, packet.getLength());
-                // packet.getAddress() bazen ipv6 olarak geliyor onu duzelt
-                System.out.println("Message received: " + receivedMessage + " from " + packet.getAddress());
-                p2p.addElementToFoundList(packet.getAddress().toString(), receivedMessage);
+                if (receivedMessage.startsWith("FOUND ")) {
+                    receivedMessage = receivedMessage.substring(6);
+                    // packet.getAddress() bazen ipv6 olarak geliyor onu duzelt
+                    System.out.println("Message received: " + receivedMessage + " from " + packet.getAddress());
+                    p2p.addElementToFoundList(packet.getAddress().toString(), receivedMessage);
+                } else if (receivedMessage.startsWith("DOWNLOAD ")) {
+
+                }
             }
             System.out.println("Close receiver socket");
         } catch (IOException e) {

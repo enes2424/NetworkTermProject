@@ -1,6 +1,6 @@
 normal:
-	@javac -cp src src/P2P.java -d class
-	@java -cp class P2P
+	@javac -cp lib/gson-2.8.9.jar:src -d class src/P2P.java
+	@java -cp lib/gson-2.8.9.jar:class P2P
 
 clean:
 	@rm -rf class

@@ -1,42 +1,20 @@
 import java.io.File;
 import java.io.IOException;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
+
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Collections;
 import java.util.Comparator;
 
 public class FolderComparison {
-    public static void main(String[] args) {
-        String folderPath1 = "/home/eates/Masaüstü/a";
-        String folderPath2 = "/home/eates/Masaüstü/b";
 
-        File folder1 = new File(folderPath1);
-        File folder2 = new File(folderPath2);
-
-        try {
-            if (areFoldersEqual(folder1, folder2))
-                System.out.println("Klasörlerin içerikleri aynı.");
-            else
-                System.out.println("Klasörlerin içerikleri farklı.");
-        } catch (IOException | NoSuchAlgorithmException e) {
-            System.err.println("Bir hata oluştu: " + e.getMessage());
-        }
-    }
-
-    public static boolean areFoldersEqual(File folder1, File folder2) throws IOException, NoSuchAlgorithmException {
-        // Her iki klasördeki dosyaların hash'lerini alın
-        List<List<String>> folder1Hashes = getAllFileHashes(folder1);
-        List<List<String>> folder2Hashes = getAllFileHashes(folder2);
-
-        // Hash listelerini karşılaştır
-        return folder1Hashes.get(1).equals(folder2Hashes.get(1));
-    }
-
-    private static List<List<String>> getAllFileHashes(File folder) throws IOException, NoSuchAlgorithmException {
+    public static List<List<String>> getAllFileHashes(File folder) throws IOException, NoSuchAlgorithmException {
         ArrayList<String> paths = new ArrayList<>();
         ArrayList<String> hashes = new ArrayList<>();
         List<File> files = getAllFiles(folder);
@@ -60,7 +38,6 @@ public class FolderComparison {
             sortedPaths.add(paths.get(index));
             sortedHashes.add(hashes.get(index));
         }
-
         return List.of(sortedPaths, sortedHashes);
     }
 
@@ -82,7 +59,6 @@ public class FolderComparison {
         byte[] fileBytes = Files.readAllBytes(filePath);
         byte[] hashBytes = digest.digest(fileBytes);
 
-        // Hash'i hex string'e çevir
         StringBuilder sb = new StringBuilder();
         for (byte b : hashBytes)
             sb.append(String.format("%02x", b));

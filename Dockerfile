@@ -6,7 +6,8 @@ RUN apt clean
 WORKDIR /CSE471TermProject
 
 COPY src src
-COPY images images 
+COPY images images
+COPY lib lib
 COPY Makefile Makefile
 
 ENTRYPOINT ["make"]

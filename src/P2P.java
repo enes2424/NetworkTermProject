@@ -1,5 +1,7 @@
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 import java.awt.Font;
 import java.awt.Color;
@@ -13,6 +15,8 @@ import java.io.File;
 import java.io.IOException;
 
 import java.net.InetAddress;
+
+import com.google.gson.Gson;
 
 import javax.swing.DefaultListModel;
 import javax.swing.ImageIcon;
@@ -60,7 +64,9 @@ public class P2P extends JFrame {
 	private boolean						isConnect = false;
 	private JLabel						foundFiles = new JLabel("Found files:");
 	private DefaultListModel<String>	listModel = new DefaultListModel<>();
+	private List<List<List<String>>>	listIDs = new ArrayList<>();
     private JList<String>				list = new JList<>(listModel);
+	private Gson                		gson = new Gson();
     private JScrollPane					scrollPane;
 	private P2P							self = this;
 
@@ -262,23 +268,37 @@ public class P2P extends JFrame {
 			return ;
 		if (receivedMessage.equals("")) {
 			for (int i = 0; i < listModel.getSize(); i++)
-				if (listModel.getElementAt(i).contains(address))
+				if (listModel.getElementAt(i).contains(address)) {
+					listIDs.remove(i);
 					listModel.remove(i--);
+				}
 			return ;
 		}
-		String[]	files = receivedMessage.split(",");
-		int			size = files.length;
-		int			index = 0;
+
+		String[]			filesAndJsons = receivedMessage.split(";");
+		String[]			files = filesAndJsons[0].split(",");
+		String[]			jsons = filesAndJsons[1].split("\\|");
+		int					size = files.length;
+		int					index = 0;
+
 		for (int i = 0; i < listModel.getSize(); i++) {
 			if (listModel.getElementAt(i).contains(address)) {
-				if (index == size)
+				if (index == size) {
+					listIDs.remove(i);
 					listModel.remove(i--);
-				else
+				} else {
+					System.out.println(gson.fromJson(jsons[i], List.class));
+					listIDs.set(i, gson.fromJson(jsons[index], List.class));
 					listModel.set(i, files[index++] + " from " + address);
+				}
 			}
 		}
-		for (int i = index; i < size; i++)
+
+		for (int i = index; i < size; i++) {
+			System.out.println(gson.fromJson(jsons[i], List.class));
+			listIDs.add(gson.fromJson(jsons[i], List.class));
 			listModel.addElement(files[i] + " from " + address);
+		}
 	}
 	
 	private class Handler implements ActionListener {
