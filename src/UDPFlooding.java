@@ -69,9 +69,10 @@ public class UDPFlooding {
 
         long    len = 0;
         File[]  files = file.listFiles();
-
-        for (File f : files)
-            len += calculateByte(f);
+        
+        if (files != null)
+        	for (File f : files)
+        		len += calculateByte(f);
         return len;
     }
 
@@ -133,7 +134,7 @@ public class UDPFlooding {
                     receivedMessage = receivedMessage.substring(6);
                     // packet.getAddress() bazen ipv6 olarak geliyor onu duzelt
                     System.out.println("Message received: " + receivedMessage + " from " + packet.getAddress());
-                    p2p.addElementToFoundList(packet.getAddress().toString(), receivedMessage);
+                    p2p.addElementToFoundList(packet.getAddress().toString().substring(1), receivedMessage);
                 } else if (receivedMessage.startsWith("REQUEST ")) {
                     receivedMessage = receivedMessage.substring(8);
                     System.out.println(receivedMessage);

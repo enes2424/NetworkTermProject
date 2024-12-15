@@ -1,6 +1,5 @@
-import java.util.HashMap;
-import java.util.Map;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 
 import java.awt.Font;
@@ -15,6 +14,7 @@ import java.io.File;
 import java.io.IOException;
 
 import java.net.InetAddress;
+import java.net.NetworkInterface;
 
 import com.google.gson.Gson;
 
@@ -41,6 +41,7 @@ import javax.swing.event.DocumentEvent;
 public class P2P extends JFrame {
 	private static final long			serialVersionUID = 1L;
 	private static String				selfAddress;
+	private static List<String>			selfAddresses = new ArrayList<>();
 	private UDPFlooding 				peer = new UDPFlooding(this);
 	private JMenuBar					menuBar = new JMenuBar();
 	private JMenu						filesMenu = new JMenu("Files");
@@ -75,8 +76,28 @@ public class P2P extends JFrame {
 	private boolean						isValid = false;
 
 	static {
-		try { 
-			selfAddress = InetAddress.getLocalHost().getHostAddress();
+		try {
+			Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+            while (networkInterfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = networkInterfaces.nextElement();
+                
+                // İnterface'i atla eğer kapalıysa ya da bir loopback adaptörü ise
+                if (networkInterface.isLoopback() || !networkInterface.isUp()) {
+                    continue;
+                }
+
+                Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
+                boolean	isSelfAddress = true;
+                while (inetAddresses.hasMoreElements()) {
+                    InetAddress inetAddress = inetAddresses.nextElement();
+
+                    selfAddresses.add(inetAddress.getHostAddress());
+                    if (isSelfAddress) {
+                    	selfAddress = inetAddress.getHostAddress();
+                    	isSelfAddress = false;
+                    }
+                }
+            }
 		} catch (IOException e) {
             e.printStackTrace();
 			System.exit(1);
@@ -103,7 +124,7 @@ public class P2P extends JFrame {
 			System.exit(0);
 		} else
 			System.out.println("Closing operation was canceled.");
-	}	
+	}
 
 	public P2P(String name) {
 		super(name);
@@ -147,7 +168,7 @@ public class P2P extends JFrame {
 		
 		textField1.setBounds(20, 40, 390, 25);
 		add(textField1);
-		
+
 		set1Button.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
                 folderChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -307,8 +328,11 @@ public class P2P extends JFrame {
 	}
 
 	public	void addElementToFoundList(String address, String receivedMessage) {
-		if (address.substring(1).equals(selfAddress))
+		if (selfAddresses.contains(address)) {
+			if (!address.equals(selfAddress))
+				setTitle(address);
 			return ;
+		}
 		if (receivedMessage.equals("")) {
 			for (int i = 0; i < listModel2.getSize(); i++)
 				if (listModel2.getElementAt(i).contains(address)) {

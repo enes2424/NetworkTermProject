@@ -1,6 +1,6 @@
 normal:
 	@javac -cp lib/gson-2.8.9.jar:src -d class src/P2P.java
-	@java -cp lib/gson-2.8.9.jar:class P2P
+	@java -cp lib/gson-2.8.9.jar:class -Djava.net.preferIPv4Stack=true P2P
 
 clean:
 	@rm -rf class
