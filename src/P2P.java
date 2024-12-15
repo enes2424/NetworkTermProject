@@ -60,11 +60,10 @@ public class P2P extends JFrame {
 	private boolean						isConnect = false;
 	private JLabel						foundFiles = new JLabel("Found files:");
 	private DefaultListModel<String>	listModel = new DefaultListModel<>();
-	private Map<InetAddress, String>	map = new HashMap<>();
     private JList<String>				list = new JList<>(listModel);
     private JScrollPane					scrollPane;
 	private P2P							self = this;
-	
+
 	static {
 		try { 
 			selfAddress = InetAddress.getLocalHost().getHostAddress();
@@ -258,23 +257,28 @@ public class P2P extends JFrame {
 		return textField1.getText();
 	}
 
-	public	void addElementToFoundList(InetAddress address, String receivedMessage) {
-		if (address.toString().substring(1).equals(selfAddress))
+	public	void addElementToFoundList(String address, String receivedMessage) {
+		if (address.substring(1).equals(selfAddress))
 			return ;
+		if (receivedMessage.equals("")) {
+			for (int i = 0; i < listModel.getSize(); i++)
+				if (listModel.getElementAt(i).contains(address))
+					listModel.remove(i--);
+			return ;
+		}
+		String[]	files = receivedMessage.split(",");
+		int			size = files.length;
+		int			index = 0;
 		for (int i = 0; i < listModel.getSize(); i++) {
-			if (listModel.getElementAt(i).contains(address.toString())) {
-				if (receivedMessage.equals("")) {
-					map.remove(address);
-					listModel.remove(i);
-					return ;
-				}
-				map.put(address, receivedMessage);
-				listModel.set(i, receivedMessage + " from " + address);
-				return;
+			if (listModel.getElementAt(i).contains(address)) {
+				if (index == size)
+					listModel.remove(i--);
+				else
+					listModel.set(i, files[index++] + " from " + address);
 			}
 		}
-		if (!receivedMessage.equals(""))
-			listModel.addElement(receivedMessage + " from " + address);
+		for (int i = index; i < size; i++)
+			listModel.addElement(files[i] + " from " + address);
 	}
 	
 	private class Handler implements ActionListener {

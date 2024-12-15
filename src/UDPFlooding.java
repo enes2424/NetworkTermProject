@@ -1,4 +1,8 @@
 import java.io.IOException;
+import java.io.File;
+
+import java.nio.file.Path;
+
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -8,6 +12,8 @@ public class UDPFlooding {
     private static final String BROADCAST_ADDRESS = "255.255.255.255";
     private DatagramSocket	senderSocket;
     private DatagramSocket	receiverSocket;
+    private byte[]          buffer = new byte[8192];
+    private DatagramPacket  packet = new DatagramPacket(buffer, buffer.length);
     private boolean			running;
     private P2P				p2p;
 
@@ -49,7 +55,19 @@ public class UDPFlooding {
         	senderSocket.setBroadcast(true);
 
             while (running) {
-                send(p2p.getMessage());
+                String message = p2p.getMessage();
+                if (!message.equals("")) {
+                    File folder = new File(message);
+                    Path baseFolderPath = folder.toPath();
+                    File[] files = folder.listFiles();
+                    StringBuilder sb = new StringBuilder();
+                    for (File file : files) {
+                        sb.append(baseFolderPath.relativize(file.toPath()).toString());
+                        sb.append(',');
+                    }
+                    send(sb.toString());
+                } else
+                    send("");
                 for (int i = 0; running && i < 10; i++)
                 	Thread.sleep(300);
             }
@@ -65,15 +83,13 @@ public class UDPFlooding {
     private void startReceiver() {
         try {
         	receiverSocket = new DatagramSocket(PORT);
-            byte[] buffer = new byte[1024];
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
             while (running) {
             	receiverSocket.receive(packet);
                 String receivedMessage = new String(packet.getData(), 0, packet.getLength());
                 // packet.getAddress() bazen ipv6 olarak geliyor onu duzelt
                 System.out.println("Message received: " + receivedMessage + " from " + packet.getAddress());
-                p2p.addElementToFoundList(packet.getAddress(), receivedMessage);
+                p2p.addElementToFoundList(packet.getAddress().toString(), receivedMessage);
             }
             System.out.println("Close receiver socket");
         } catch (IOException e) {
