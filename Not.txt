@@ -1,0 +1,1 @@
+Aynı anda birden fazla indirme yapınca donup kalıyor

@@ -1,6 +1,7 @@
 FROM ubuntu:22.04
 
 RUN apt update && apt install -y openjdk-17-jdk && apt clean
+RUN apt install net-tools
 
 WORKDIR /CSE471TermProject
 

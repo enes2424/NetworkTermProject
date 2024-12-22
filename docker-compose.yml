@@ -1,7 +1,6 @@
 services:
   peer1:
     container_name: peer1
-    build: .
     image: p2p
     environment:
       - DISPLAY=:0
@@ -13,7 +12,6 @@ services:
 
   peer2:
     container_name: peer2
-    build: .
     image: p2p
     environment:
       - DISPLAY=:0
@@ -25,7 +23,8 @@ services:
 
   peer3:
     container_name: peer3
-    build: .
+    depends_on:
+      - peer1
     image: p2p
     environment:
       - DISPLAY=:0

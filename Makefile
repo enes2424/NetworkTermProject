@@ -10,13 +10,16 @@ docker:
 	@docker build -t p2p .
 	@docker run -e APPNAME=peer -e DISPLAY=:0 -v /tmp/.X11-unix:/tmp/.X11-unix --name peer p2p
 
-docker-compose: down
-	@docker-compose up --build
-
-down:
+docker-compose:
 	@docker-compose down
+	@docker build -t p2p .
+	@docker-compose up
 
 clean-docker:
+	@docker rm peer 2>/dev/null | true
+	@docker-compose down
+
+clean-all-docker:
 	@docker system prune -a --volumes
 
 .PHONY: normal clean docker docker-compose clean-docker
