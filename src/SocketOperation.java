@@ -365,8 +365,7 @@ public class SocketOperation {
 	    		Thread.sleep(300);
 			}
 			
-			System.out.println("DOWNLOAD " + targetID + " to " + P2P.selfAddress);
-
+			System.out.println("DOWNLOAD " + downloadedBytes + " from " + P2P.selfAddress);
 			long	requestFirstBytesIndex = uploadIDControlList.get(id);
 			String	message = "DOWNLOAD " + targetID + " ";
 			byte[]	buffer = message.getBytes();
