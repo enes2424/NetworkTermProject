@@ -8,9 +8,9 @@ clean:
 docker:
 	@docker rm peer 2>/dev/null | true
 	@docker build -t p2p .
-	@docker run -e DISPLAY=:0 -v /tmp/.X11-unix:/tmp/.X11-unix --name peer p2p
+	@docker run -e APPNAME=peer -e DISPLAY=:0 -v /tmp/.X11-unix:/tmp/.X11-unix --name peer p2p
 
-docker-compose:
+docker-compose: down
 	@docker-compose up --build
 
 down:

@@ -12,11 +12,9 @@ import java.awt.event.WindowAdapter;
 
 import java.io.File;
 import java.io.IOException;
-
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
-
-import com.google.gson.Gson;
 
 import javax.swing.DefaultListModel;
 import javax.swing.ImageIcon;
@@ -40,9 +38,10 @@ import javax.swing.event.DocumentEvent;
 
 public class P2P extends JFrame {
 	private static final long			serialVersionUID = 1L;
-	private static String				selfAddress;
+	public static String				selfAddress;
 	private static List<String>			selfAddresses = new ArrayList<>();
-	private UDPFlooding 				peer = new UDPFlooding(this);
+	private static String				name = "P2P";
+	private SocketOperation 			peer = new SocketOperation(this);
 	private JMenuBar					menuBar = new JMenuBar();
 	private JMenu						filesMenu = new JMenu("Files");
 	private JMenuItem					connectMenuItem = new JMenuItem("Connect");
@@ -70,31 +69,34 @@ public class P2P extends JFrame {
 	private DefaultListModel<String>	listModel2 = new DefaultListModel<>();
     private JList<String>				list = new JList<>(listModel2);
 	private JScrollPane					scrollPane2 = new JScrollPane(list);
-	private List<String>				listID = new ArrayList<>();
+	private List<String>				listFileInfo = new ArrayList<>();
 	private	List<Long>					listByte = new ArrayList<>();
-	private Gson                		gson = new Gson();
 	private boolean						isValid = false;
 
 	static {
 		try {
-			Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+			Enumeration<NetworkInterface>	networkInterfaces = NetworkInterface.getNetworkInterfaces();
+			NetworkInterface				networkInterface;
+			Enumeration<InetAddress>		inetAddresses;
+            InetAddress						inetAddress;
+            boolean							isSelfAddress;
+
             while (networkInterfaces.hasMoreElements()) {
-                NetworkInterface networkInterface = networkInterfaces.nextElement();
-                
-                // İnterface'i atla eğer kapalıysa ya da bir loopback adaptörü ise
-                if (networkInterface.isLoopback() || !networkInterface.isUp()) {
-                    continue;
-                }
+                networkInterface = networkInterfaces.nextElement();
 
-                Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
-                boolean	isSelfAddress = true;
+                if (networkInterface.isLoopback() || !networkInterface.isUp())
+                	continue;
+
+                inetAddresses = networkInterface.getInetAddresses();
+                isSelfAddress = true;
                 while (inetAddresses.hasMoreElements()) {
-                    InetAddress inetAddress = inetAddresses.nextElement();
-
-                    selfAddresses.add(inetAddress.getHostAddress());
-                    if (isSelfAddress) {
-                    	selfAddress = inetAddress.getHostAddress();
-                    	isSelfAddress = false;
+                    inetAddress = inetAddresses.nextElement();
+                    if (inetAddress instanceof Inet4Address) {
+	                    selfAddresses.add(inetAddress.getHostAddress());
+	                    if (isSelfAddress) {
+	                    	selfAddress = inetAddress.getHostAddress();
+	                    	isSelfAddress = false;
+	                    }
                     }
                 }
             }
@@ -105,12 +107,13 @@ public class P2P extends JFrame {
 	}
 
 	public static void main(String[] args) {
-		new P2P("P2P " + selfAddress);
+		if (args.length == 1)
+			name = args[0];
+		new P2P(name + " " + selfAddress);
 	}
 	
 	private void windowClosing() {
 		if (!isConnect) {
-			System.out.println("Closing operation is being performed...");
 			System.exit(0);
 		}
 		int response = JOptionPane.showConfirmDialog(P2P.this, 
@@ -120,10 +123,8 @@ public class P2P extends JFrame {
 	
 		if (response == JOptionPane.YES_OPTION) {
 			peer.disconnect();
-			System.out.println("Closing operation is being performed...");
 			System.exit(0);
-		} else
-			System.out.println("Closing operation was canceled.");
+		}
 	}
 
 	public P2P(String name) {
@@ -229,7 +230,6 @@ public class P2P extends JFrame {
                     if (selectedItem == null || selectedIndex == -1)
 						return ;
 					selectedItem = selectedItem.substring(0, selectedItem.indexOf(" from "));
-                    System.out.println("Clicked file: " + selectedItem);
 					if (isValid) {
 						int response = JOptionPane.showConfirmDialog(P2P.this, 
 							"Do you want to download file " + selectedItem + "?", 
@@ -237,16 +237,19 @@ public class P2P extends JFrame {
 							JOptionPane.YES_NO_OPTION);
 					
 						if (response == JOptionPane.YES_OPTION) {
-							try {
-								peer.sendRequest(listID.get(selectedIndex));
-							} catch (IOException err) {
-								System.out.println("Download cancelled!");
-							}
-						} else
-							System.out.println("Download cancelled!");
-					} else {
+							listModel1.addElement(selectedItem + "   %0");
+							new Thread(() -> {
+								try {
+									peer.addIDControlList();
+									peer.download(textField2.getText(), listModel1.size() - 1, listByte.get(selectedIndex), listFileInfo.get(selectedIndex), peer.downloadThreadNum++);
+								} catch (IOException | InterruptedException err) {
+									JOptionPane.showMessageDialog(P2P.this, "Connection is broken!", "Download Cancelled", JOptionPane.WARNING_MESSAGE);
+								}
+							}).start();
+						}
+					} else
 						JOptionPane.showMessageDialog(P2P.this, "No suitable destination folder found!", "Download Cancelled", JOptionPane.WARNING_MESSAGE);
-					}
+					list.clearSelection();
                 }
             }
         });
@@ -288,6 +291,10 @@ public class P2P extends JFrame {
 		setVisible(true);
 	}
 	
+	public void failListModel1Element(int index) {
+		listModel1.remove(index);
+	}
+	
 	private boolean controlValid1() {
 		File directory = new File(textField1.getText());
 		if (directory.exists() && directory.isDirectory()) {
@@ -308,7 +315,7 @@ public class P2P extends JFrame {
 		return isValid = false;
 	}
 
-	public	String getMessage() {
+	public	String getSharedFolder() {
 		if (controlValid1() == false)
 			return "";
 		return textField1.getText();
@@ -327,16 +334,20 @@ public class P2P extends JFrame {
         return String.format("%.2f %s", size, units[index]);
 	}
 
-	public	void addElementToFoundList(String address, String receivedMessage) {
+	public boolean isMessageOwner(String address) {
 		if (selfAddresses.contains(address)) {
 			if (!address.equals(selfAddress))
-				setTitle(address);
-			return ;
+				setTitle(name + address);
+			return true;
 		}
+		return false;
+	}
+	
+	public	void addElementToFoundList(String address, String receivedMessage) {
 		if (receivedMessage.equals("")) {
 			for (int i = 0; i < listModel2.getSize(); i++)
 				if (listModel2.getElementAt(i).contains(address)) {
-					listID.remove(i);
+					listFileInfo.remove(i);
 					listByte.remove(i);
 					listModel2.remove(i--);
 				}
@@ -353,11 +364,11 @@ public class P2P extends JFrame {
 		for (int i = 0; i < listModel2.getSize(); i++) {
 			if (listModel2.getElementAt(i).contains(address)) {
 				if (index == size) {
-					listID.remove(i);
+					listFileInfo.remove(i);
 					listByte.remove(i);
 					listModel2.remove(i--);
 				} else {
-					listID.set(i, jsons[index]);
+					listFileInfo.set(i, jsons[index]);
 					listByte.set(i, Long.parseLong(bytes[index]));
 					listModel2.set(i, files[index] + " " + formatBytes(bytes[index++]) + " from " + address);
 				}
@@ -365,8 +376,7 @@ public class P2P extends JFrame {
 		}
 
 		for (int i = index; i < size; i++) {
-			System.out.println(gson.fromJson(jsons[i], List.class));
-			listID.add(jsons[i]);
+			listFileInfo.add(jsons[i]);
 			listByte.add(Long.parseLong(bytes[i]));
 			listModel2.addElement(files[i] + " " + formatBytes(bytes[i]) + " from " + address);
 		}
@@ -397,5 +407,10 @@ public class P2P extends JFrame {
 				JOptionPane.showMessageDialog(P2P.this, "Name : Enes Mahmut\nSurname : ATES\nSchool Number : 20200702008\n"
 						+ "Email : enesmahmut.ates@std.yeditepe.edu.tr", "Developer Information", JOptionPane.INFORMATION_MESSAGE, icon);
 		}	
+	}
+
+	public void setPercentage(int index, double l) {
+		String item = listModel1.get(index);
+		listModel1.set(index, String.format("%s %.2f",  item.substring(0, item.indexOf('%') + 1), l * 100));
 	}
 }

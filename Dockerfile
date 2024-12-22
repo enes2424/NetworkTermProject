@@ -1,13 +1,15 @@
 FROM ubuntu:22.04
 
-RUN apt update && apt install -y openjdk-17-jdk make
-RUN apt clean
+RUN apt update && apt install -y openjdk-17-jdk && apt clean
 
 WORKDIR /CSE471TermProject
 
 COPY src src
 COPY images images
 COPY lib lib
-COPY Makefile Makefile
+COPY entrypoint.sh entrypoint.sh
+COPY enes enes
+RUN chmod +x entrypoint.sh
+RUN sed -i 's/\r$//' entrypoint.sh
 
-ENTRYPOINT ["make"]
+ENTRYPOINT ["./entrypoint.sh"]

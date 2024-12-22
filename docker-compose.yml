@@ -2,8 +2,10 @@ services:
   peer1:
     container_name: peer1
     build: .
+    image: p2p
     environment:
       - DISPLAY=:0
+      - APPNAME=peer1
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
     networks:
@@ -12,8 +14,10 @@ services:
   peer2:
     container_name: peer2
     build: .
+    image: p2p
     environment:
       - DISPLAY=:0
+      - APPNAME=peer2
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
     networks:
@@ -22,8 +26,10 @@ services:
   peer3:
     container_name: peer3
     build: .
+    image: p2p
     environment:
       - DISPLAY=:0
+      - APPNAME=peer3
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
     networks:
