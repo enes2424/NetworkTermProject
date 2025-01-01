@@ -1,6 +1,8 @@
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import java.awt.Font;
 import java.awt.Color;
@@ -12,9 +14,11 @@ import java.awt.event.WindowAdapter;
 
 import java.io.File;
 import java.io.IOException;
+
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.net.UnknownHostException;
 
 import javax.swing.DefaultListModel;
 import javax.swing.ImageIcon;
@@ -41,7 +45,7 @@ public class P2P extends JFrame {
 	public static String				selfAddress;
 	private static List<String>			selfAddresses = new ArrayList<>();
 	private static String				name = "P2P";
-	private SocketOperation 			peer = new SocketOperation(this);
+	private SocketOperation 			peer;
 	private JMenuBar					menuBar = new JMenuBar();
 	private JMenu						filesMenu = new JMenu("Files");
 	private JMenuItem					connectMenuItem = new JMenuItem("Connect");
@@ -72,6 +76,7 @@ public class P2P extends JFrame {
 	private List<String>				listFileInfo = new ArrayList<>();
 	private	List<Long>					listByte = new ArrayList<>();
 	private boolean						isValid = false;
+	private ExecutorService 			threadPool = Executors.newCachedThreadPool();
 
 	static {
 		try {
@@ -106,10 +111,14 @@ public class P2P extends JFrame {
         }
 	}
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws IOException {
 		if (args.length == 1)
 			name = args[0];
-		new P2P(name + " " + selfAddress);
+		try {
+			new P2P(name + " " + selfAddress);
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+		}
 	}
 	
 	private void windowClosing() {
@@ -127,9 +136,11 @@ public class P2P extends JFrame {
 		}
 	}
 
-	public P2P(String name) {
+	public P2P(String name) throws UnknownHostException {
 		super(name);
 		
+		peer = new SocketOperation(this);
+
 		setSize(500, 650);
 		setResizable(false);
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -238,14 +249,19 @@ public class P2P extends JFrame {
 					
 						if (response == JOptionPane.YES_OPTION) {
 							listModel1.addElement(selectedItem + "   %0");
-							new Thread(() -> {
+							peer.addIDControlList();
+							int		threadNum = peer.downloadThreadNum++;
+							String	text = textField2.getText();
+							int		index = listModel1.size() - 1;
+							long	totalByte = listByte.get(selectedIndex);
+							String	fileInfo = listFileInfo.get(selectedIndex);
+							threadPool.execute(() -> {
 								try {
-									peer.addIDControlList();
-									peer.download(textField2.getText(), listModel1.size() - 1, listByte.get(selectedIndex), listFileInfo.get(selectedIndex), peer.downloadThreadNum++);
+									peer.download(text, index, totalByte, fileInfo, threadNum);
 								} catch (IOException | InterruptedException err) {
 									JOptionPane.showMessageDialog(P2P.this, "Connection is broken!", "Download Cancelled", JOptionPane.WARNING_MESSAGE);
 								}
-							}).start();
+							});
 						}
 					} else
 						JOptionPane.showMessageDialog(P2P.this, "No suitable destination folder found!", "Download Cancelled", JOptionPane.WARNING_MESSAGE);
@@ -291,10 +307,6 @@ public class P2P extends JFrame {
 		setVisible(true);
 	}
 	
-	public void failListModel1Element(int index) {
-		listModel1.remove(index);
-	}
-	
 	private boolean controlValid1() {
 		File directory = new File(textField1.getText());
 		if (directory.exists() && directory.isDirectory()) {
@@ -335,12 +347,11 @@ public class P2P extends JFrame {
 	}
 
 	public boolean isMessageOwner(String address) {
-		if (selfAddresses.contains(address)) {
-			if (!address.equals(selfAddress))
-				setTitle(name + address);
-			return true;
-		}
-		return false;
+		if (!selfAddresses.contains(address))
+			return false;
+		if (!address.equals(selfAddress))
+			setTitle(name + address);
+		return true;
 	}
 	
 	public	void addElementToFoundList(String address, String receivedMessage) {
@@ -394,16 +405,14 @@ public class P2P extends JFrame {
 		            statusLabel.setIcon(greenCircle);
 					peer.connect();
 				}
-			}
-	        else if (event.getSource() == disconnectMenuItem) {
+			} else if (event.getSource() == disconnectMenuItem) {
 	        	if (isConnect) {
 		        	isConnect = false;
 		            statusLabel.setIcon(redCircle);
 					listModel2.clear();
 		            peer.disconnect();
 	        	}
-	        }
-			else if (event.getSource() == aboutMenuItem)
+	        } else if (event.getSource() == aboutMenuItem)
 				JOptionPane.showMessageDialog(P2P.this, "Name : Enes Mahmut\nSurname : ATES\nSchool Number : 20200702008\n"
 						+ "Email : enesmahmut.ates@std.yeditepe.edu.tr", "Developer Information", JOptionPane.INFORMATION_MESSAGE, icon);
 		}	

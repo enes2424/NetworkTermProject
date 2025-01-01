@@ -23,8 +23,6 @@ services:
 
   peer3:
     container_name: peer3
-    depends_on:
-      - peer1
     image: p2p
     environment:
       - DISPLAY=:0

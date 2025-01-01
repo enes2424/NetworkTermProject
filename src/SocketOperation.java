@@ -3,7 +3,6 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.io.InputStream;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.io.File;
 
 import java.nio.file.Paths;
@@ -14,13 +13,15 @@ import java.net.DatagramSocket;
 import java.net.ServerSocket;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.UnknownHostException;
 
 import com.google.gson.Gson;
 
 import java.security.NoSuchAlgorithmException;
 
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.Lock;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -32,34 +33,42 @@ public class SocketOperation {
     private static final int    		TCP_PORT = 8080;
     private static final String 		BROADCAST_ADDRESS = "255.255.255.255";
     private static final int			CHUNK_SIZE = 256 * 1024;
-    private final Lock 					uploadLock = new ReentrantLock();
-    private final Lock 					confirmLock = new ReentrantLock();
-    private final Lock 					downloadLock = new ReentrantLock();
+    private ExecutorService 			threadPool = Executors.newCachedThreadPool();
+    private final ReentrantLock 		uploadLock = new ReentrantLock();
+    private final ReentrantLock 		runningLock = new ReentrantLock();
+    private final ReentrantLock 		confirmLock = new ReentrantLock();
+    private final ReentrantLock 		downloadLock = new ReentrantLock();
+    private final ReentrantLock 		shareFolderLock = new ReentrantLock();
     private DatagramSocket	    		senderSocket;
     private DatagramSocket	    		udpReceiverSocket;
     private ServerSocket				tcpReceiverSocket;
-    private byte[]              		buffer = new byte[65535];
+    private byte[]              		buffer = new byte[65507];
     private DatagramPacket      		packet = new DatagramPacket(buffer, buffer.length);
     private boolean			    		running;
     private Gson                		gson = new Gson();
     private P2P				    		p2p;
-    private boolean						isTheSenderWorking = false;
     private int							uploadThreadNum = 0;
     public int							downloadThreadNum = 0;
+    private InetAddress					broadcastAddress;
     public ArrayList<Long>				uploadIDControlList = new ArrayList<>();
     public ArrayList<SmallInformation>	confirmIDControlList = new ArrayList<>();
     public ArrayList<byte[]>			downloadIDControlList = new ArrayList<>();
 
-    public SocketOperation(P2P p2p) {
+    public SocketOperation(P2P p2p) throws UnknownHostException {
+    	broadcastAddress = InetAddress.getByName(BROADCAST_ADDRESS);
     	this.p2p = p2p;
+    	runningLock.lock();
         this.running = false;
+        runningLock.unlock();
     }
 
     public void connect() {
+    	runningLock.lock();
     	this.running = true;
-    	new Thread(this::shareFolder).start();
-    	new Thread(this::udpReceiver).start();
-    	new Thread(this::tcpReceiver).start();
+    	runningLock.unlock();
+    	threadPool.execute(this::shareFolder);
+    	threadPool.execute(this::udpReceiver);
+    	threadPool.execute(this::tcpReceiver);
     }
 
     public void	disconnect() {
@@ -68,7 +77,9 @@ public class SocketOperation {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        runningLock.lock();
     	this.running = false;
+    	runningLock.unlock();
     	senderSocket.close();
     	udpReceiverSocket.close();
     	try {
@@ -98,11 +109,11 @@ public class SocketOperation {
         return true;
     }
 
-    public void download(String destinationFolder, int index, long totalByte, String message, int id) throws IOException, InterruptedException {
+    public void download(String destinationFolder, int index, long totalByte, String fileInfo, int id) throws IOException, InterruptedException {
     	long downloadedBytes = 0;
     	long readedBytes = 0;
 		@SuppressWarnings("unchecked")
-		List<List<String>> data = gson.fromJson(message, List.class);
+		List<List<String>> data = gson.fromJson(fileInfo, List.class);
     	List<String> paths = data.get(0);
     	List<String> bytes = data.get(1);
     	SmallInformation si;
@@ -117,17 +128,26 @@ public class SocketOperation {
 
     	int 		control;
     	int			targetID;
-    	String 		targetAddress;
- 
+    	InetAddress	targetAddress;
     	x: while (downloadedBytes != totalByte) {
     		confirmLock.lock();
 	    	confirmIDControlList.set(id, null);
 	    	confirmLock.unlock();
-	    	sendMessage("CONTROL " + downloadedBytes + ";" + id + ";" + message);
+    		runningLock.lock();
+    		if (!this.running) {
+    			runningLock.unlock();
+    			throw new IOException();
+    		}
+	    	System.out.println("CONTROL " + downloadedBytes + ";" + id + ";" + fileInfo);
+	    	try {
+	    		sendMessage("CONTROL " + downloadedBytes + ";" + id + ";" + fileInfo);
+	    		runningLock.unlock();
+	    	} catch(IOException err) {
+	    		runningLock.unlock();
+	    		throw new IOException();
+	    	}
 	    	control = 0;
 	    	while (true) {
-	    		if (!this.running)
-	    			throw new IOException();
 	    		confirmLock.lock();
 	    		si = confirmIDControlList.get(id);
 	    		confirmLock.unlock();
@@ -146,11 +166,20 @@ public class SocketOperation {
 	    	}
 	    	targetID = si.getNum();
 	    	targetAddress = si.getAddress();
-			System.out.println("REQUEST " + downloadedBytes + ";" + targetID + " to " + targetAddress);
-    		if (!this.running)
+			
+    		runningLock.lock();
+    		if (!this.running) {
+    			runningLock.unlock();
     			throw new IOException();
-	    	if (!sendPrivateMessage("REQUEST " + downloadedBytes + ";" + targetID, targetAddress))
-	    		continue x;
+    		}
+    		System.out.println("REQUEST " + downloadedBytes + ";" + targetID + " to " + targetAddress);
+    		try {
+    			sendPrivateMessage("REQUEST " + downloadedBytes + ";" + targetID, targetAddress);
+    			runningLock.unlock();
+    		} catch(IOException err) {
+    			runningLock.unlock();
+    			throw new IOException();
+    		}
 	    	control = 0;
 	    	downloadLock.lock();
 	    	while (downloadIDControlList.get(id) == null) {
@@ -200,38 +229,29 @@ public class SocketOperation {
     private void sendMessage(String message) throws IOException {
     	byte[] buffer = message.getBytes();
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length,
-                InetAddress.getByName(BROADCAST_ADDRESS), UDP_PORT);
+        		broadcastAddress , UDP_PORT);
 
         senderSocket.send(packet);
     }
     
-    private boolean sendPrivateMessage(String message, String address) throws IOException {
-    	Socket socket = null;
-    	try {
-    		System.out.println("PRIVATE " + message + " to " + address);
-	    	socket = new Socket(address, TCP_PORT);
-	        OutputStream outputStream = socket.getOutputStream();
-	        PrintWriter writer = new PrintWriter(outputStream, true);
+    private void sendPrivateMessage(String message, InetAddress address) throws IOException {
+    	byte[] buffer = message.getBytes();
+		System.out.println("To " + address + " " + message);
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length,
+                address, UDP_PORT);
 
-	        writer.print(message);
-	        writer.flush();
-	        writer.close();
-    	} catch (IOException e) {
-    		if (socket != null)
-    			socket.close();
-    		return false;
-    	}
-		socket.close();
-        return true;
+        senderSocket.send(packet);
     }
 
     private void shareFolder() {
-    	isTheSenderWorking = true;
         try {
         	senderSocket = new DatagramSocket();
         	senderSocket.setBroadcast(true);
-
+        	
+        	runningLock.lock();
             x: while (running) {
+            	runningLock.unlock();
+            	shareFolderLock.lock();
                 String sharedFolder = p2p.getSharedFolder();
                 if (!sharedFolder.equals("")) {
                     File folder = new File(sharedFolder);
@@ -252,6 +272,8 @@ public class SocketOperation {
                             sb1.append(FolderOperation.totalnumOfBytes);
                         	sb1.append(',');
                         } catch (IOException | NoSuchAlgorithmException e) {
+                        	shareFolderLock.unlock();
+                        	runningLock.lock();
                             continue x;
                         }
                     }
@@ -262,14 +284,23 @@ public class SocketOperation {
                     sendMessage("FOUND " + sb.toString());
                 } else
                 	sendMessage("FOUND ");
-                for (int i = 0; running && i < 10; i++)
+                shareFolderLock.unlock();
+                runningLock.lock();
+                for (int i = 0; running && i < 10; i++) {
+                	runningLock.unlock();
                 	Thread.sleep(300);
+                	runningLock.lock();
+                }
             }
+            runningLock.unlock();
         } catch (IOException | InterruptedException e) {
+			if (runningLock.isLocked())
+        		runningLock.unlock();
+			if (shareFolderLock.isLocked())
+				shareFolderLock.unlock();
         	if (!e.getMessage().equals("Socket closed"))
             	e.printStackTrace();
         }
-        isTheSenderWorking = false;
     }
     
     private void tcpReceiver() {
@@ -277,15 +308,15 @@ public class SocketOperation {
     		Socket					clientSocket;
     		InputStream				inputStream;
     		ByteArrayOutputStream	byteArrayOutputStream;
-    		String					receivedMessage;
-    		String[]				receivedMessageSplit;
-    		
-    		tcpReceiverSocket = new ServerSocket(TCP_PORT);
 
+    		tcpReceiverSocket = new ServerSocket(TCP_PORT);
+    		runningLock.lock();
     		while (running) {
+    			runningLock.unlock();
     			clientSocket = tcpReceiverSocket.accept();
 
     	        inputStream = clientSocket.getInputStream();
+
     	        byteArrayOutputStream = new ByteArrayOutputStream();
 
     	        byte[] buffer = new byte[1024];
@@ -293,38 +324,21 @@ public class SocketOperation {
 
     	        while ((bytesRead = inputStream.read(buffer)) != -1)
     	        	byteArrayOutputStream.write(buffer, 0, bytesRead);
-    	        
-    	        buffer = byteArrayOutputStream.toByteArray();
-    	        if (buffer[0] == 'D') {
-    	        	int index = 9;
-    	        	int id = 0;
-    	        	while (buffer[index] != ' ')
-    	        		id = id * 10 + buffer[index++] - '0';
-    	        	downloadLock.lock();
-                	downloadIDControlList.set(id, Arrays.copyOfRange(buffer, index + 1, buffer.length)); 
-                	downloadLock.unlock();
-                	continue;
-    	        }
-    	        receivedMessage = byteArrayOutputStream.toString();
     			clientSocket.close();
-    			if (receivedMessage.startsWith("CONFIRM ")) {
-                	receivedMessage = receivedMessage.substring(8);
-                	receivedMessageSplit = receivedMessage.split(";");
-                	int id = Integer.parseInt(receivedMessageSplit[1]);
-                	confirmLock.lock();
-                	if (confirmIDControlList.get(id) == null)
-                		confirmIDControlList.set(id, new SmallInformation(clientSocket.getInetAddress().toString().substring(1), Integer.parseInt(receivedMessageSplit[2]), Long.parseLong(receivedMessageSplit[0])));
-                	confirmLock.unlock();
-    			} else if (receivedMessage.startsWith("REQUEST ")) {
-                	receivedMessage = receivedMessage.substring(8);
-                	System.out.println("From " + clientSocket.getInetAddress().toString().substring(1) + " " + receivedMessage);
-                	receivedMessageSplit = receivedMessage.split(";");
-                	uploadLock.lock();
-                	uploadIDControlList.set(Integer.parseInt(receivedMessageSplit[1]), Long.parseLong(receivedMessageSplit[0]));
-                	uploadLock.unlock();
-                }
+    	        buffer = byteArrayOutputStream.toByteArray();
+    	        int index = 0;
+    	        int id = 0;
+    	        while (buffer[index] != ' ')
+    	        	id = id * 10 + buffer[index++] - '0';
+    	        downloadLock.lock();
+                downloadIDControlList.set(id, Arrays.copyOfRange(buffer, index + 1, buffer.length)); 
+                downloadLock.unlock();
+                runningLock.lock();
     		}
+    		runningLock.unlock();
 		} catch (IOException e) {
+			if (runningLock.isLocked())
+				runningLock.unlock();
 			if (!e.getMessage().equals("Socket closed"))
             	e.printStackTrace();
 		}
@@ -332,26 +346,30 @@ public class SocketOperation {
 
     private void udpReceiver() {
         try {
-        	udpReceiverSocket = new DatagramSocket(UDP_PORT);
-
+			udpReceiverSocket = new DatagramSocket(UDP_PORT);
+			
+			runningLock.lock();
             x: while (running) {
-            	udpReceiverSocket.receive(packet);
+            	runningLock.unlock();
+				udpReceiverSocket.receive(packet);
             	String address = packet.getAddress().toString().substring(1);
                 String receivedMessage = new String(packet.getData(), 0, packet.getLength());
-                if (p2p.isMessageOwner(address))
+                if (p2p.isMessageOwner(address)) {
+                	runningLock.lock();
                 	continue;
+                }
                 if (receivedMessage.startsWith("FOUND ")) {
                     receivedMessage = receivedMessage.substring(6);
                     p2p.addElementToFoundList(address, receivedMessage);
                 } else if (receivedMessage.startsWith("CONTROL ")) {
+					System.out.println("From " + address + " " + receivedMessage);
                     receivedMessage = receivedMessage.substring(8);
                     String sharedFolder = p2p.getSharedFolder();
-                    if (sharedFolder.equals(""))
+                    if (sharedFolder.equals("")) {
+                    	runningLock.lock();
                     	continue ;
-                    running = false;
-                    while (isTheSenderWorking)
-                    	Thread.sleep(300);
-                    senderSocket.close();
+                    }
+                    shareFolderLock.lock();
                     File folder = new File(sharedFolder);
                     Path baseFolderPath = folder.toPath();
                     File[] files = folder.listFiles();
@@ -361,55 +379,66 @@ public class SocketOperation {
                         	List<List<String>> getAllFileInformations = FolderOperation.getAllFileInformations(baseFolderPath, file);
                             if (getAllFileInformations.get(2).equals(gson.fromJson(receivedMessageSplit[2], List.class).get(2))) {
                             	ArrayList<byte[]>	bytes = FolderOperation.bytes;
-                            	running = true;
                             	uploadLock.lock();
                             	uploadIDControlList.add(-1L);
                             	uploadLock.unlock();
-                            	new Thread(this::shareFolder).start();
-                            	new Thread(() -> upload(address, getAllFileInformations, bytes, receivedMessageSplit[0], receivedMessageSplit[1], uploadThreadNum++)).start();
-                            	continue x;
+                            	shareFolderLock.unlock();
+                            	InetAddress	addr = packet.getAddress();
+								int	threadNum = uploadThreadNum++;
+                            	threadPool.execute(() -> upload(addr, getAllFileInformations, bytes, receivedMessageSplit[0], receivedMessageSplit[1], threadNum));
+                            	runningLock.lock();
+								continue x;
                             }
                         } catch (IOException | NoSuchAlgorithmException e) {
                             System.err.println("An error occurred: " + e.getMessage());
                         }
                     }
-                    running = true;
-                	new Thread(this::shareFolder).start();
+                    shareFolderLock.unlock();
+                } else if (receivedMessage.startsWith("CONFIRM ")) {
+					System.out.println("From " + address + " " + receivedMessage);
+                	receivedMessage = receivedMessage.substring(8);
+                	String[] receivedMessageSplit = receivedMessage.split(";");
+                	int id = Integer.parseInt(receivedMessageSplit[1]);
+                	confirmLock.lock();
+                	if (confirmIDControlList.get(id) == null)
+                		confirmIDControlList.set(id, new SmallInformation(packet.getAddress(), Integer.parseInt(receivedMessageSplit[2]), Long.parseLong(receivedMessageSplit[0])));
+                	confirmLock.unlock();
+    			} else if (receivedMessage.startsWith("REQUEST ")) {
+                	receivedMessage = receivedMessage.substring(8);
+                	String[] receivedMessageSplit = receivedMessage.split(";");
+                	uploadLock.lock();
+                	uploadIDControlList.set(Integer.parseInt(receivedMessageSplit[1]), Long.parseLong(receivedMessageSplit[0]));
+                	uploadLock.unlock();
                 }
+                runningLock.lock();
             }
+            runningLock.unlock();
         } catch (IOException e) {
+			if (runningLock.isLocked())
+        		runningLock.unlock();
+			if (shareFolderLock.isLocked())
+        		shareFolderLock.unlock();
             if (!e.getMessage().equals("Socket closed"))
             	e.printStackTrace();
-        } catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+        }
     }
 
-	private void upload(String address, List<List<String>> getAllFileInformations, ArrayList<byte[]> bytes, String downloadedBytes, String targetID, int id) {
+	private void upload(InetAddress address, List<List<String>> getAllFileInformations, ArrayList<byte[]> bytes, String downloadedBytes, String targetID, int id) {
 		try {
-			int control = 0;
-			while (senderSocket.isClosed()) {
-				if (control == 40)
-					return ;
-				control++;
-	    		Thread.sleep(300);
-			}
-			if (!sendPrivateMessage("CONFIRM " + downloadedBytes + ";" + targetID + ";" + id, address))
-				return ;
-			control = 0;
+			sendPrivateMessage("CONFIRM " + downloadedBytes + ";" + targetID + ";" + id, address);
 			uploadLock.lock();
+			int control = 0;
 			while (uploadIDControlList.get(id) == -1L) {
 				uploadLock.unlock();
-				if (control == 40)
+				if (control++ == 40)
 					return ;
-				control++;
 	    		Thread.sleep(300);
 	    		uploadLock.lock();
 			}
-			System.out.println("DOWNLOAD " + downloadedBytes + " from " + P2P.selfAddress);
+			System.out.println("DOWNLOAD " + downloadedBytes + " to " + address);
 			long	requestFirstBytesIndex = uploadIDControlList.get(id);
 			uploadLock.unlock();
-			String	message = "DOWNLOAD " + targetID + " ";
+			String	message = targetID + " ";
 			byte[]	buffer = message.getBytes();
 			int		len = buffer.length;
 			int		size = 0;
@@ -445,11 +474,11 @@ public class SocketOperation {
 
 
 class SmallInformation {
-	private String		address;
+	private InetAddress	address;
 	private Long 		dowloadedBytes;
 	private int			num;
 
-	public SmallInformation(String address, int num, Long dowloadedBytes) {
+	public SmallInformation(InetAddress address, int num, Long dowloadedBytes) {
 		this.num = num;
 		this.address = address;
 		this.dowloadedBytes = dowloadedBytes;
@@ -459,7 +488,7 @@ class SmallInformation {
 		return num;
 	}
 
-	public String getAddress() {
+	public InetAddress getAddress() {
 		return address;
 	}
 
