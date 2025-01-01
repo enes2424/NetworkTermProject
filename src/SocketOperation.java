@@ -138,7 +138,6 @@ public class SocketOperation {
     			runningLock.unlock();
     			throw new IOException();
     		}
-	    	System.out.println("CONTROL " + downloadedBytes + ";" + id + ";" + fileInfo);
 	    	try {
 	    		sendMessage("CONTROL " + downloadedBytes + ";" + id + ";" + fileInfo);
 	    		runningLock.unlock();
@@ -172,7 +171,6 @@ public class SocketOperation {
     			runningLock.unlock();
     			throw new IOException();
     		}
-    		System.out.println("REQUEST " + downloadedBytes + ";" + targetID + " to " + targetAddress);
     		try {
     			sendPrivateMessage("REQUEST " + downloadedBytes + ";" + targetID, targetAddress);
     			runningLock.unlock();
@@ -236,7 +234,6 @@ public class SocketOperation {
     
     private void sendPrivateMessage(String message, InetAddress address) throws IOException {
     	byte[] buffer = message.getBytes();
-		System.out.println("To " + address + " " + message);
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length,
                 address, UDP_PORT);
 
@@ -362,7 +359,6 @@ public class SocketOperation {
                     receivedMessage = receivedMessage.substring(6);
                     p2p.addElementToFoundList(address, receivedMessage);
                 } else if (receivedMessage.startsWith("CONTROL ")) {
-					System.out.println("From " + address + " " + receivedMessage);
                     receivedMessage = receivedMessage.substring(8);
                     String sharedFolder = p2p.getSharedFolder();
                     if (sharedFolder.equals("")) {
@@ -390,12 +386,11 @@ public class SocketOperation {
 								continue x;
                             }
                         } catch (IOException | NoSuchAlgorithmException e) {
-                            System.err.println("An error occurred: " + e.getMessage());
+                        	e.printStackTrace();
                         }
                     }
                     shareFolderLock.unlock();
                 } else if (receivedMessage.startsWith("CONFIRM ")) {
-					System.out.println("From " + address + " " + receivedMessage);
                 	receivedMessage = receivedMessage.substring(8);
                 	String[] receivedMessageSplit = receivedMessage.split(";");
                 	int id = Integer.parseInt(receivedMessageSplit[1]);
@@ -435,7 +430,6 @@ public class SocketOperation {
 	    		Thread.sleep(300);
 	    		uploadLock.lock();
 			}
-			System.out.println("DOWNLOAD " + downloadedBytes + " to " + address);
 			long	requestFirstBytesIndex = uploadIDControlList.get(id);
 			uploadLock.unlock();
 			String	message = targetID + " ";
