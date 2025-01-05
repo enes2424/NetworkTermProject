@@ -9,7 +9,6 @@ COPY src src
 COPY images images
 COPY lib lib
 COPY entrypoint.sh entrypoint.sh
-COPY enes enes
 RUN chmod +x entrypoint.sh
 RUN sed -i 's/\r$//' entrypoint.sh
 
