@@ -27,32 +27,33 @@ import java.util.Arrays;
 import java.util.List;
 
 import javax.swing.JOptionPane;
+import javax.swing.DefaultListModel;
 
 public class SocketOperation {
-    private static final int    		UDP_PORT = 9090;
-    private static final int    		TCP_PORT = 8080;
-    private static final String 		BROADCAST_ADDRESS = "255.255.255.255";
-    private static final int			CHUNK_SIZE = 256 * 1024;
-    private ExecutorService 			threadPool = Executors.newCachedThreadPool();
-    private final ReentrantLock 		uploadLock = new ReentrantLock();
-    private final ReentrantLock 		runningLock = new ReentrantLock();
-    private final ReentrantLock 		confirmLock = new ReentrantLock();
-    private final ReentrantLock 		downloadLock = new ReentrantLock();
-    private final ReentrantLock 		shareFolderLock = new ReentrantLock();
-    private DatagramSocket	    		senderSocket;
-    private DatagramSocket	    		udpReceiverSocket;
-    private ServerSocket				tcpReceiverSocket;
-    private byte[]              		buffer = new byte[65507];
-    private DatagramPacket      		packet = new DatagramPacket(buffer, buffer.length);
-    private boolean			    		running;
-    private Gson                		gson = new Gson();
-    private P2P				    		p2p;
-    private int							uploadThreadNum = 0;
-    public int							downloadThreadNum = 0;
-    private InetAddress					broadcastAddress;
-    public ArrayList<Long>				uploadIDControlList = new ArrayList<>();
-    public ArrayList<SmallInformation>	confirmIDControlList = new ArrayList<>();
-    public ArrayList<byte[]>			downloadIDControlList = new ArrayList<>();
+    private static final int    			UDP_PORT = 9090;
+    private static final int    			TCP_PORT = 8080;
+    private static final String 			BROADCAST_ADDRESS = "255.255.255.255";
+    private static final int				CHUNK_SIZE = 256 * 1024;
+	public static DefaultListModel<String>	listModel1;
+    private ExecutorService 				threadPool = Executors.newCachedThreadPool();
+    private final ReentrantLock 			uploadLock = new ReentrantLock();
+    private final ReentrantLock 			runningLock = new ReentrantLock();
+    private final ReentrantLock 			confirmLock = new ReentrantLock();
+    private final ReentrantLock 			downloadLock = new ReentrantLock();
+    private final ReentrantLock 			shareFolderLock = new ReentrantLock();
+    private DatagramSocket	    			senderSocket;
+    private DatagramSocket	    			udpReceiverSocket;
+    private ServerSocket					tcpReceiverSocket;
+    private byte[]              			buffer = new byte[65507];
+    private DatagramPacket      			packet = new DatagramPacket(buffer, buffer.length);
+    private boolean			    			running;
+    private Gson                			gson = new Gson();
+    private P2P				    			p2p;
+    private int								uploadThreadNum = 0;
+    private InetAddress						broadcastAddress;
+    public ArrayList<Long>					uploadIDControlList = new ArrayList<>();
+    public ArrayList<SmallInformation>		confirmIDControlList = new ArrayList<>();
+    public ArrayList<byte[]>				downloadIDControlList = new ArrayList<>();
 
     public SocketOperation(P2P p2p) throws UnknownHostException {
     	broadcastAddress = InetAddress.getByName(BROADCAST_ADDRESS);
@@ -109,7 +110,7 @@ public class SocketOperation {
         return true;
     }
 
-    public void download(String destinationFolder, int index, long totalByte, String fileInfo, int id) throws IOException, InterruptedException {
+    public void download(String destinationFolder, int id, long totalByte, String fileInfo) throws IOException, InterruptedException {
     	long downloadedBytes = 0;
     	long readedBytes = 0;
 		@SuppressWarnings("unchecked")
@@ -216,7 +217,7 @@ public class SocketOperation {
 	    		readedBytes += buffer.length;
 	    	}
 	    	downloadedBytes += buffer.length;
-	    	p2p.setPercentage(index, (1.0 * downloadedBytes) / totalByte);
+	    	p2p.setPercentage(id, (1.0 * downloadedBytes) / totalByte);
 	    	downloadLock.lock();
 	    	downloadIDControlList.set(id, null);
 	    	downloadLock.unlock();
@@ -255,29 +256,31 @@ public class SocketOperation {
                     Path baseFolderPath = folder.toPath();
                     File[] files = folder.listFiles();
                     StringBuilder sb = new StringBuilder();
-                    for (File file : files) {
-                        sb.append(baseFolderPath.relativize(file.toPath()).toString());
-                        sb.append(',');
-                    }
-                    StringBuilder sb1 = new StringBuilder();
+					StringBuilder sb1 = new StringBuilder();
                     StringBuilder sb2 = new StringBuilder();
+                    StringBuilder sb3 = new StringBuilder();
                     for (File file : files) {
+						if (file.isDirectory() && listModel1.contains(baseFolderPath.relativize(file.toPath()).toString()))
+							continue;
                         try {
                             String jsonData = gson.toJson(FolderOperation.getAllFileInformations(baseFolderPath, file));
-                            sb2.append(jsonData);
-                            sb2.append('|');
-                            sb1.append(FolderOperation.totalnumOfBytes);
+							sb1.append(baseFolderPath.relativize(file.toPath()).toString());
                         	sb1.append(',');
+                            sb2.append(FolderOperation.totalnumOfBytes);
+                        	sb2.append(',');
+							sb3.append(jsonData);
+                            sb3.append('|');
                         } catch (IOException | NoSuchAlgorithmException e) {
                         	shareFolderLock.unlock();
                         	runningLock.lock();
                             continue x;
                         }
                     }
-                    sb.append(';');
-                    sb.append(sb1);
+					sb.append(sb1);
                     sb.append(';');
                     sb.append(sb2);
+                    sb.append(';');
+                    sb.append(sb3);
                     sendMessage("FOUND " + sb.toString());
                 } else
                 	sendMessage("FOUND ");
@@ -371,6 +374,8 @@ public class SocketOperation {
                     File[] files = folder.listFiles();
                     String[] receivedMessageSplit = receivedMessage.split(";");
                     for (File file : files) {
+						if (file.isDirectory() && listModel1.contains(baseFolderPath.relativize(file.toPath()).toString()))
+							continue;
                         try {
                         	List<List<String>> getAllFileInformations = FolderOperation.getAllFileInformations(baseFolderPath, file);
                             if (getAllFileInformations.get(2).equals(gson.fromJson(receivedMessageSplit[2], List.class).get(2))) {

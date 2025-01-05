@@ -15,6 +15,8 @@ import java.awt.event.WindowAdapter;
 import java.io.File;
 import java.io.IOException;
 
+import java.nio.file.Path;
+
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -37,8 +39,6 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.DocumentEvent;
-
-
 
 public class P2P extends JFrame {
 	private static final long			serialVersionUID = 1L;
@@ -66,16 +66,27 @@ public class P2P extends JFrame {
 	private JButton						set2Button = new JButton("Set");
 	private JFileChooser				folderChooser = new JFileChooser();
 	private boolean						isConnect = false;
-	private JLabel						downloadingFiles = new JLabel("Downloading files:");
+	private JLabel						folderExclusion = new JLabel("Folder exclusion:");
 	private DefaultListModel<String>	listModel1 = new DefaultListModel<>();
-	private JScrollPane					scrollPane1 = new JScrollPane(new JList<>(listModel1));
-	private JLabel						foundFiles = new JLabel("Found files:");
+    private JList<String>				list1 = new JList<>(listModel1);
+	private JScrollPane					scrollPane1 = new JScrollPane(list1);
+	private JButton						add1Button = new JButton("Add");
+	private JButton						del1Button = new JButton("Del");
+	private JLabel						excludeFilesMachingTheseMasks = new JLabel("Exclude files maching these masks:");
 	private DefaultListModel<String>	listModel2 = new DefaultListModel<>();
-    private JList<String>				list = new JList<>(listModel2);
-	private JScrollPane					scrollPane2 = new JScrollPane(list);
+    private JList<String>				list2 = new JList<>(listModel2);
+	private JScrollPane					scrollPane2 = new JScrollPane(list2);
+	private JButton						add2Button = new JButton("Add");
+	private JButton						del2Button = new JButton("Del");
+	private JLabel						downloadingFiles = new JLabel("Downloading files:");
+	private DefaultListModel<String>	listModel3 = new DefaultListModel<>();
+	private JScrollPane					scrollPane3 = new JScrollPane(new JList<>(listModel3));
+	private JLabel						foundFiles = new JLabel("Found files:");
+	private DefaultListModel<String>	listModel4 = new DefaultListModel<>();
+    private JList<String>				list3 = new JList<>(listModel4);
+	private JScrollPane					scrollPane4 = new JScrollPane(list3);
 	private List<String>				listFileInfo = new ArrayList<>();
 	private	List<Long>					listByte = new ArrayList<>();
-	private boolean						isValid = false;
 	private ExecutorService 			threadPool = Executors.newCachedThreadPool();
 
 	static {
@@ -141,7 +152,7 @@ public class P2P extends JFrame {
 		
 		peer = new SocketOperation(this);
 
-		setSize(500, 650);
+		setSize(500, 750);
 		setResizable(false);
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setLayout(null);
@@ -218,46 +229,116 @@ public class P2P extends JFrame {
 		set2Button.setBounds(420, 100, 50, 25);
 		add(set2Button);
 
+		FolderOperation.listModel1 = listModel1;
+		SocketOperation.listModel1 = listModel1;
+
+		folderExclusion.setFont(new Font("Tahoma", Font.BOLD, 13));
+		folderExclusion.setBounds(20, 130, 200, 25);
+		add(folderExclusion);
+
+		scrollPane1.setBounds(20, 160, 150, 120);
+		add(scrollPane1);
+
+		add1Button.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				if (controlValid(textField1)) {
+					File directory = new File(textField1.getText());
+					Path baseFolderPath = directory.toPath();
+					List<String> folders = FolderOperation.getAllFolders(listModel1, baseFolderPath, directory);
+					new FolderSelection(listModel1, folders);
+				} else
+					JOptionPane.showMessageDialog(P2P.this, "No suitable shared folder found!", "Folder Exclusion Cancelled", JOptionPane.WARNING_MESSAGE);
+			}
+		});
+
+		add1Button.setFont(new Font("Tahoma", Font.BOLD, 9));
+		add1Button.setBounds(175, 180, 55, 30);
+		add(add1Button);
+
+		del1Button.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				int selectedIndexToDelete = list1.getSelectedIndex();
+				if (selectedIndexToDelete != -1)
+					listModel1.remove(selectedIndexToDelete);
+			}
+		});
+
+		del1Button.setFont(new Font("Tahoma", Font.BOLD, 9));
+		del1Button.setBounds(175, 220, 55, 30);
+		add(del1Button);
+
+		excludeFilesMachingTheseMasks.setFont(new Font("Tahoma", Font.BOLD, 13));
+		excludeFilesMachingTheseMasks.setBounds(235, 130, 300, 25);
+		add(excludeFilesMachingTheseMasks);
+
+		scrollPane2.setBounds(235, 160, 200, 120);
+		add(scrollPane2);
+
+		add2Button.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				String mask = JOptionPane.showInputDialog(P2P.this, "Enter the mask to exclude:", "Mask", JOptionPane.PLAIN_MESSAGE);
+				if (mask != null && !mask.equals("") && !listModel2.contains(mask)) {
+					listModel2.addElement(mask);
+				}
+			}
+		});
+
+		add2Button.setFont(new Font("Tahoma", Font.BOLD, 9));
+		add2Button.setBounds(440, 180, 55, 30);
+		add(add2Button);
+
+		del2Button.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				int selectedIndexToDelete = list2.getSelectedIndex();
+				if (selectedIndexToDelete != -1)
+					listModel2.remove(selectedIndexToDelete);
+			}
+		});
+
+		del2Button.setFont(new Font("Tahoma", Font.BOLD, 9));
+		del2Button.setBounds(440, 220, 55, 30);
+		add(del2Button);
+		
+
 		downloadingFiles.setFont(new Font("Tahoma", Font.BOLD, 13));
-		downloadingFiles.setBounds(20, 130, 500, 25);
+		downloadingFiles.setBounds(20, 290, 500, 25);
 		add(downloadingFiles);
 
-        scrollPane1.setBounds(20, 160, 450, 150);
-        add(scrollPane1);
+		scrollPane3.setBounds(20, 320, 450, 150);
+		add(scrollPane3);
 		
 		foundFiles.setFont(new Font("Tahoma", Font.BOLD, 13));
-		foundFiles.setBounds(20, 330, 500, 25);
+		foundFiles.setBounds(20, 480, 500, 25);
 		add(foundFiles);
 
-        scrollPane2.setBounds(20, 360, 450, 150);
-        add(scrollPane2);
-        
-        list.addListSelectionListener(new ListSelectionListener() {
+        scrollPane4.setBounds(20, 510, 450, 150);
+        add(scrollPane4);
+
+        list3.addListSelectionListener(new ListSelectionListener() {
             @Override
             public void valueChanged(ListSelectionEvent e) {
                 if (!e.getValueIsAdjusting()) {
-                    String	selectedItem = list.getSelectedValue();
-					int		selectedIndex = list.getSelectedIndex();
+                    String	selectedItem = list3.getSelectedValue();
+					int		selectedIndex = list3.getSelectedIndex();
                     if (selectedItem == null || selectedIndex == -1)
 						return ;
 					selectedItem = selectedItem.substring(0, selectedItem.indexOf(" from "));
-					if (isValid) {
+					if (controlValid(textField2)) {
 						int response = JOptionPane.showConfirmDialog(P2P.this, 
 							"Do you want to download file " + selectedItem + "?", 
 							"Download",
 							JOptionPane.YES_NO_OPTION);
 					
 						if (response == JOptionPane.YES_OPTION) {
-							listModel1.addElement(selectedItem + "   %0");
+							listModel3.addElement(selectedItem + "   %0");
 							peer.addIDControlList();
-							int		threadNum = peer.downloadThreadNum++;
 							String	text = textField2.getText();
-							int		index = listModel1.size() - 1;
+							int		index = listModel3.size() - 1;
 							long	totalByte = listByte.get(selectedIndex);
 							String	fileInfo = listFileInfo.get(selectedIndex);
 							threadPool.execute(() -> {
 								try {
-									peer.download(text, index, totalByte, fileInfo, threadNum);
+									peer.download(text, index, totalByte, fileInfo);
 								} catch (IOException | InterruptedException err) {
 									JOptionPane.showMessageDialog(P2P.this, "Connection is broken!", "Download Cancelled", JOptionPane.WARNING_MESSAGE);
 								}
@@ -265,7 +346,7 @@ public class P2P extends JFrame {
 						}
 					} else
 						JOptionPane.showMessageDialog(P2P.this, "No suitable destination folder found!", "Download Cancelled", JOptionPane.WARNING_MESSAGE);
-					list.clearSelection();
+					list3.clearSelection();
                 }
             }
         });
@@ -273,62 +354,55 @@ public class P2P extends JFrame {
 		textField1.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
-                controlValid1();
+				listModel1.clear();
+                controlValid(textField1);
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                controlValid1();
+				listModel1.clear();
+                controlValid(textField1);
             }
 
 			@Override
             public void changedUpdate(DocumentEvent e) {
-                controlValid1();
+				listModel1.clear();
+                controlValid(textField1);
             }
         });
 	
 		textField2.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
-                controlValid2();
+                controlValid(textField2);
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                controlValid2();
+                controlValid(textField2);
             }
 
 			@Override
             public void changedUpdate(DocumentEvent e) {
-                controlValid2();
+                controlValid(textField2);
             }
         });
 
 		setVisible(true);
 	}
 	
-	private boolean controlValid1() {
-		File directory = new File(textField1.getText());
+	private boolean controlValid(JTextField textField) {
+		File directory = new File(textField.getText());
 		if (directory.exists() && directory.isDirectory()) {
-			textField1.setForeground(Color.BLACK);
+			textField.setForeground(Color.BLACK);
 			return true;
 		}
-		textField1.setForeground(Color.RED);
+		textField.setForeground(Color.RED);
 		return false;
-	}
-	
-	private boolean controlValid2() {
-		File directory = new File(textField2.getText());
-		if (directory.exists() && directory.isDirectory()) {
-			textField2.setForeground(Color.BLACK);
-			return isValid = true;
-		}
-		textField2.setForeground(Color.RED);
-		return isValid = false;
 	}
 
 	public	String getSharedFolder() {
-		if (controlValid1() == false)
+		if (controlValid(textField1) == false)
 			return "";
 		return textField1.getText();
 	}
@@ -356,40 +430,38 @@ public class P2P extends JFrame {
 	
 	public	void addElementToFoundList(String address, String receivedMessage) {
 		if (receivedMessage.equals("")) {
-			for (int i = 0; i < listModel2.getSize(); i++)
-				if (listModel2.getElementAt(i).contains(address)) {
+			for (int i = 0; i < listModel4.getSize(); i++) {
+				if (listModel4.getElementAt(i).contains(address)) {
 					listFileInfo.remove(i);
 					listByte.remove(i);
-					listModel2.remove(i--);
+					listModel4.remove(i--);
 				}
+			}
 			return ;
 		}
-
 		String[]			filesAndJsons = receivedMessage.split(";");
 		String[]			files = filesAndJsons[0].split(",");
 		String[]			bytes = filesAndJsons[1].split(",");
 		String[]			jsons = filesAndJsons[2].split("\\|");
 		int					size = files.length;
 		int					index = 0;
-
-		for (int i = 0; i < listModel2.getSize(); i++) {
-			if (listModel2.getElementAt(i).contains(address)) {
+		for (int i = 0; i < listModel4.size(); i++) {
+			if (listModel4.getElementAt(i).contains(address)) {
 				if (index == size) {
 					listFileInfo.remove(i);
 					listByte.remove(i);
-					listModel2.remove(i--);
+					listModel4.remove(i--);
 				} else {
 					listFileInfo.set(i, jsons[index]);
 					listByte.set(i, Long.parseLong(bytes[index]));
-					listModel2.set(i, files[index] + " " + formatBytes(bytes[index++]) + " from " + address);
+					listModel4.set(i, files[index] + " " + formatBytes(bytes[index++]) + " from " + address);
 				}
 			}
 		}
-
 		for (int i = index; i < size; i++) {
 			listFileInfo.add(jsons[i]);
 			listByte.add(Long.parseLong(bytes[i]));
-			listModel2.addElement(files[i] + " " + formatBytes(bytes[i]) + " from " + address);
+			listModel4.addElement(files[i] + " " + formatBytes(bytes[i]) + " from " + address);
 		}
 	}
 	
@@ -409,7 +481,7 @@ public class P2P extends JFrame {
 	        	if (isConnect) {
 		        	isConnect = false;
 		            statusLabel.setIcon(redCircle);
-					listModel2.clear();
+					listModel4.clear();
 		            peer.disconnect();
 	        	}
 	        } else if (event.getSource() == aboutMenuItem)
@@ -419,7 +491,7 @@ public class P2P extends JFrame {
 	}
 
 	public void setPercentage(int index, double l) {
-		String item = listModel1.get(index);
-		listModel1.set(index, String.format("%s %.2f",  item.substring(0, item.indexOf('%') + 1), l * 100));
+		String item = listModel3.get(index);
+		listModel3.set(index, String.format("%s %.2f",  item.substring(0, item.indexOf('%') + 1), l * 100));
 	}
 }

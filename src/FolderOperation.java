@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import javax.swing.DefaultListModel;
+
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
@@ -12,18 +14,21 @@ import java.util.List;
 import java.util.Comparator;
 
 public class FolderOperation {
-	public static ArrayList<byte[]> bytes;
-	public static int				totalnumOfBytes;
+	public static ArrayList<byte[]>         bytes;
+	public static int				        totalnumOfBytes;
+    public static DefaultListModel<String>	listModel1;
 	
     public static List<List<String>> getAllFileInformations(Path baseFolderPath, File folder) throws IOException, NoSuchAlgorithmException {
         ArrayList<String>	paths = new ArrayList<>();
         ArrayList<String>	numOfBytes = new ArrayList<>();
         ArrayList<String>	hashes = new ArrayList<>();
+        List<File> files;
+        
         totalnumOfBytes = 0;
         bytes = new ArrayList<>();
-        List<File> files;
+        
         if (folder.isDirectory())
-            files = getAllFiles(folder);
+            files = getAllFiles(folder, baseFolderPath);
         else
             files = List.of(folder);
 
@@ -57,17 +62,30 @@ public class FolderOperation {
         return List.of(sortedPaths, sortedNumOfBytes, sortedHashes);
     }
 
-    private static List<File> getAllFiles(File folder) {
+    private static List<File> getAllFiles(File folder, Path baseFolderPath) {
         List<File> fileList = new ArrayList<>();
         File[] files = folder.listFiles();
         if (files != null)
             for (File file : files) {
-                if (file.isDirectory())
-                    fileList.addAll(getAllFiles(file));
-                else
+                if (file.isDirectory()) {
+                    if (!listModel1.contains(baseFolderPath.relativize(file.toPath()).toString()))
+                        fileList.addAll(getAllFiles(file, baseFolderPath));
+                } else
                     fileList.add(file);
             }
         return fileList;
+    }
+
+    public static List<String>  getAllFolders(DefaultListModel<String>	listModel, Path baseFolderPath, File folder) {
+        List<String> folderList = new ArrayList<>();
+        File[] files = folder.listFiles();
+        if (files != null)
+            for (File file : files)
+                if (file.isDirectory() && !listModel.contains(baseFolderPath.relativize(file.toPath()).toString())) {
+                    folderList.add(baseFolderPath.relativize(file.toPath()).toString());
+                    folderList.addAll(getAllFolders(listModel, baseFolderPath, file));
+                }
+        return folderList;
     }
 
     private static String getFileHash(byte[] fileBytes) throws IOException, NoSuchAlgorithmException {
