@@ -17,22 +17,26 @@ public class FolderOperation {
 	public static ArrayList<byte[]>         bytes;
 	public static int				        totalnumOfBytes;
     public static DefaultListModel<String>	listModel1;
-	
-    public static List<List<String>> getAllFileInformations(Path baseFolderPath, File folder) throws IOException, NoSuchAlgorithmException {
+
+    public static List<List<String>> getAllFileInformations(Path baseFolderPath, File folder, ArrayList<String> filters) throws IOException, NoSuchAlgorithmException {
         ArrayList<String>	paths = new ArrayList<>();
         ArrayList<String>	numOfBytes = new ArrayList<>();
         ArrayList<String>	hashes = new ArrayList<>();
         List<File> files;
-        
+
         totalnumOfBytes = 0;
         bytes = new ArrayList<>();
-        
+
         if (folder.isDirectory())
             files = getAllFiles(folder, baseFolderPath);
         else
             files = List.of(folder);
 
-        for (File file : files) {
+        x: for (File file : files) {
+            if (filters != null)
+                for (String filter : filters)
+                    if (isMatchedFileAndMask(file.getName(), filter))
+                        continue x;
             Path filePath = file.toPath();
             paths.add(baseFolderPath.relativize(filePath).toString());
             byte[] fileBytes = Files.readAllBytes(filePath);
@@ -76,6 +80,18 @@ public class FolderOperation {
         return fileList;
     }
 
+    public static List<File>  getAllFilesAndFolders(File folder) {
+        List<File> fileList = new ArrayList<>();
+        File[] files = folder.listFiles();
+        if (files != null)
+            for (File file : files) {
+                fileList.add(file);
+                if (file.isDirectory())
+                    fileList.addAll(getAllFilesAndFolders(file));
+            }
+        return fileList;
+    }
+
     public static List<String>  getAllFolders(DefaultListModel<String>	listModel, Path baseFolderPath, File folder) {
         List<String> folderList = new ArrayList<>();
         File[] files = folder.listFiles();
@@ -96,5 +112,32 @@ public class FolderOperation {
         for (byte b : hashBytes)
             sb.append(String.format("%02x", b));
         return sb.toString();
+    }
+
+    public static boolean isMatchedFileAndMask(String fileName, String mask) {
+        int i1 = 0, i2 = 0, len1 = fileName.length(), len2 = mask.length();
+        while (i1 < len1 && i2 < len2)
+        {
+            if (mask.charAt(i2) == '*')
+                break;
+            if (mask.charAt(i2) != '?' && fileName.charAt(i1) != mask.charAt(i2)) {
+                return false;
+            }
+            i1++;
+            i2++;
+        }
+        while (i2 < len2 && mask.charAt(i2) == '*')
+            i2++;
+        if (i1 == len1)
+            return i2 == len2;
+        if (i2 == len2)
+            return mask.charAt(i2 - 1) == '*';
+        while (true) {
+            if (fileName.charAt(i1) == mask.charAt(i2) &&
+                isMatchedFileAndMask(fileName.substring(i1), mask.substring(i2)))
+                    return true;
+            if (++i1 == len1)
+                return false;
+        }
     }
 }

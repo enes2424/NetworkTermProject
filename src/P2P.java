@@ -35,6 +35,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.event.DocumentListener;
@@ -131,16 +132,15 @@ public class P2P extends JFrame {
 			e.printStackTrace();
 		}
 	}
-	
+
 	private void windowClosing() {
-		if (!isConnect) {
+		if (!isConnect)
 			System.exit(0);
-		}
-		int response = JOptionPane.showConfirmDialog(P2P.this, 
-			"Are you sure you want to close the application?", 
-			"Close", 
+		int response = JOptionPane.showConfirmDialog(P2P.this,
+			"Are you sure you want to close the application?",
+			"Close",
 			JOptionPane.YES_NO_OPTION);
-	
+
 		if (response == JOptionPane.YES_OPTION) {
 			peer.disconnect();
 			System.exit(0);
@@ -149,14 +149,16 @@ public class P2P extends JFrame {
 
 	public P2P(String name) throws UnknownHostException {
 		super(name);
-		
+
 		peer = new SocketOperation(this);
 
-		setSize(500, 750);
+		setSize(575, 800);
+		//setSize(515, 750);
 		setResizable(false);
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setLocationRelativeTo(null);
 		setLayout(null);
-		
+
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 
         addWindowListener(new WindowAdapter() {
@@ -175,20 +177,20 @@ public class P2P extends JFrame {
 
 		menuBar.add(helpMenu);
 		helpMenu.add(aboutMenuItem);
-		
+
 		connectMenuItem.addActionListener(handler);
 		disconnectMenuItem.addActionListener(handler);
 		exitMenuItem.addActionListener(handler);
 		aboutMenuItem.addActionListener(handler);
-		
+
 		statusLabel.setBounds(435, 10, 20, 20);
 	    statusLabel.setIcon(redCircle);
 	    add(statusLabel);
-		
+
 		sharedFolder.setFont(new Font("Tahoma", Font.BOLD, 13));
 		sharedFolder.setBounds(20, 10, 500, 25);
 		add(sharedFolder);
-		
+
 		textField1.setBounds(20, 40, 390, 25);
 		add(textField1);
 
@@ -202,18 +204,18 @@ public class P2P extends JFrame {
                 }
 			}
 		});
-		
+
 		set1Button.setFont(new Font("Tahoma", Font.BOLD, 9));
 		set1Button.setBounds(420, 40, 50, 25);
 		add(set1Button);
-		
+
 		destinationFolder.setFont(new Font("Tahoma", Font.BOLD, 13));
 		destinationFolder.setBounds(20, 70, 500, 25);
 		add(destinationFolder);
-		
+
 		textField2.setBounds(20, 100, 390, 25);
 		add(textField2);
-		
+
 		set2Button.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
                 folderChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -224,13 +226,14 @@ public class P2P extends JFrame {
                 }
 			}
 		});
-		
+
 		set2Button.setFont(new Font("Tahoma", Font.BOLD, 9));
 		set2Button.setBounds(420, 100, 50, 25);
 		add(set2Button);
 
 		FolderOperation.listModel1 = listModel1;
 		SocketOperation.listModel1 = listModel1;
+		SocketOperation.listModel2 = listModel2;
 
 		folderExclusion.setFont(new Font("Tahoma", Font.BOLD, 13));
 		folderExclusion.setBounds(20, 130, 200, 25);
@@ -298,7 +301,7 @@ public class P2P extends JFrame {
 		del2Button.setFont(new Font("Tahoma", Font.BOLD, 9));
 		del2Button.setBounds(440, 220, 55, 30);
 		add(del2Button);
-		
+
 
 		downloadingFiles.setFont(new Font("Tahoma", Font.BOLD, 13));
 		downloadingFiles.setBounds(20, 290, 500, 25);
@@ -306,7 +309,7 @@ public class P2P extends JFrame {
 
 		scrollPane3.setBounds(20, 320, 450, 150);
 		add(scrollPane3);
-		
+
 		foundFiles.setFont(new Font("Tahoma", Font.BOLD, 13));
 		foundFiles.setBounds(20, 480, 500, 25);
 		add(foundFiles);
@@ -324,11 +327,11 @@ public class P2P extends JFrame {
 						return ;
 					selectedItem = selectedItem.substring(0, selectedItem.indexOf(" from "));
 					if (controlValid(textField2)) {
-						int response = JOptionPane.showConfirmDialog(P2P.this, 
-							"Do you want to download file " + selectedItem + "?", 
+						int response = JOptionPane.showConfirmDialog(P2P.this,
+							"Do you want to download file " + selectedItem + "?",
 							"Download",
 							JOptionPane.YES_NO_OPTION);
-					
+
 						if (response == JOptionPane.YES_OPTION) {
 							listModel3.addElement(selectedItem + "   %0");
 							peer.addIDControlList();
@@ -341,6 +344,7 @@ public class P2P extends JFrame {
 									peer.download(text, index, totalByte, fileInfo);
 								} catch (IOException | InterruptedException err) {
 									JOptionPane.showMessageDialog(P2P.this, "Connection is broken!", "Download Cancelled", JOptionPane.WARNING_MESSAGE);
+									err.printStackTrace();
 								}
 							});
 						}
@@ -370,7 +374,7 @@ public class P2P extends JFrame {
                 controlValid(textField1);
             }
         });
-	
+
 		textField2.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -390,7 +394,7 @@ public class P2P extends JFrame {
 
 		setVisible(true);
 	}
-	
+
 	private boolean controlValid(JTextField textField) {
 		File directory = new File(textField.getText());
 		if (directory.exists() && directory.isDirectory()) {
@@ -407,10 +411,9 @@ public class P2P extends JFrame {
 		return textField1.getText();
 	}
 
-	public static String formatBytes(String byteStr) {
+	public static String formatBytes(double size) {
         String[] units = {"B", "KB", "MB", "GB", "TB"};
         int index = 0;
-        double size = Long.parseLong(byteStr);
 
         while (size >= 1024 && index < units.length - 1) {
             size /= 1024.0;
@@ -427,44 +430,117 @@ public class P2P extends JFrame {
 			setTitle(name + address);
 		return true;
 	}
-	
+
 	public	void addElementToFoundList(String address, String receivedMessage) {
-		if (receivedMessage.equals("")) {
-			for (int i = 0; i < listModel4.getSize(); i++) {
+		SwingUtilities.invokeLater(() -> {
+			if (receivedMessage.equals("")) {
+				for (int i = 0; i < listModel4.getSize(); i++) {
+					if (listModel4.getElementAt(i).contains(address)) {
+						listFileInfo.remove(i);
+						listByte.remove(i);
+						listModel4.remove(i--);
+					}
+				}
+				return ;
+			}
+			String[]			filesAndJsons = receivedMessage.split(";");
+			String[]			files = filesAndJsons[0].split(",");
+			String[]			bytes = filesAndJsons[1].split(",");
+			String[]			jsons = filesAndJsons[2].split("\\|");
+			ArrayList<String>	paths;
+        	ArrayList<String>	numOfBytes;
+        	ArrayList<String>	hashes;
+			long				totalByte;
+			int					size = files.length;
+			int					index = 0;
+
+
+			x: for (int i = 0; i < listModel4.size(); i++) {
 				if (listModel4.getElementAt(i).contains(address)) {
-					listFileInfo.remove(i);
-					listByte.remove(i);
-					listModel4.remove(i--);
+					if (index == size) {
+						listFileInfo.remove(i);
+						listByte.remove(i);
+						listModel4.remove(i--);
+					} else {
+						for (int j = 0; j < listModel2.size(); j++) {
+							String filename = files[index].substring(files[index].lastIndexOf('/') + 1);
+							if (FolderOperation.isMatchedFileAndMask(filename, listModel2.getElementAt(j))) {
+								index++;
+								i--;
+								continue x;
+							}
+						}
+						totalByte = Long.parseLong(bytes[index]);
+						if (listModel2.size() == 0) {
+							listFileInfo.set(i, jsons[index]);
+							listByte.set(i, totalByte);
+							listModel4.set(i, files[index++] + " " + formatBytes(totalByte) + " from " + address);
+							continue x;
+						}
+						@SuppressWarnings("unchecked")
+						List<List<String>>	data = SocketOperation.gson.fromJson(jsons[index], List.class);
+						paths = new ArrayList<>(data.get(0));
+        				numOfBytes = new ArrayList<>(data.get(1));
+        				hashes = new ArrayList<>(data.get(2));
+						for (int j = 0; j < paths.size(); j++) {
+							String filename = paths.get(j).substring(paths.get(j).lastIndexOf('/') + 1);
+							for (int k = 0; k < listModel2.size(); k++)
+								if (FolderOperation.isMatchedFileAndMask(filename, listModel2.getElementAt(k))) {
+									paths.remove(j);
+									totalByte -= Long.parseLong(numOfBytes.get(j));
+									numOfBytes.remove(j);
+									hashes.remove(j);
+									j--;
+									break;
+								}
+						}
+						if (totalByte == 0) {
+							index++;
+							i--;
+							continue x;
+						}
+						listFileInfo.set(i, SocketOperation.gson.toJson(List.of(paths, numOfBytes, hashes)));
+						listByte.set(i, totalByte);
+						listModel4.set(i, files[index++] + " " + formatBytes(totalByte) + " from " + address);
+					}
 				}
 			}
-			return ;
-		}
-		String[]			filesAndJsons = receivedMessage.split(";");
-		String[]			files = filesAndJsons[0].split(",");
-		String[]			bytes = filesAndJsons[1].split(",");
-		String[]			jsons = filesAndJsons[2].split("\\|");
-		int					size = files.length;
-		int					index = 0;
-		for (int i = 0; i < listModel4.size(); i++) {
-			if (listModel4.getElementAt(i).contains(address)) {
-				if (index == size) {
-					listFileInfo.remove(i);
-					listByte.remove(i);
-					listModel4.remove(i--);
-				} else {
-					listFileInfo.set(i, jsons[index]);
-					listByte.set(i, Long.parseLong(bytes[index]));
-					listModel4.set(i, files[index] + " " + formatBytes(bytes[index++]) + " from " + address);
+
+
+			for (int i = index; i < size; i++) {
+				if (listModel2.size() == 0) {
+					listFileInfo.add(jsons[i]);
+					listByte.add(totalByte = Long.parseLong(bytes[i]));
+					listModel4.addElement(files[i] + " " + formatBytes(totalByte) + " from " + address);
+					continue;
 				}
+				@SuppressWarnings("unchecked")
+				List<List<String>>	data = SocketOperation.gson.fromJson(jsons[i], List.class);
+				paths = new ArrayList<>(data.get(0));
+        		numOfBytes = new ArrayList<>(data.get(1));
+        		hashes = new ArrayList<>(data.get(2));
+				totalByte = Long.parseLong(bytes[i]);
+				for (int j = 0; j < paths.size(); j++) {
+					String filename = paths.get(j).substring(paths.get(j).lastIndexOf('/') + 1);
+					for (int k = 0; k < listModel2.size(); k++)
+						if (FolderOperation.isMatchedFileAndMask(filename, listModel2.getElementAt(k))) {
+							paths.remove(j);
+							totalByte -= Long.parseLong(numOfBytes.get(j));
+							numOfBytes.remove(j);
+							hashes.remove(j);
+							j--;
+							break;
+						}
+				}
+				if (totalByte == 0)
+					continue;
+				listFileInfo.add(jsons[i]);
+				listByte.add(totalByte);
+				listModel4.addElement(files[i] + " " + formatBytes(totalByte) + " from " + address);
 			}
-		}
-		for (int i = index; i < size; i++) {
-			listFileInfo.add(jsons[i]);
-			listByte.add(Long.parseLong(bytes[i]));
-			listModel4.addElement(files[i] + " " + formatBytes(bytes[i]) + " from " + address);
-		}
+		});
 	}
-	
+
 	private class Handler implements ActionListener {
 
 		@Override
@@ -487,7 +563,7 @@ public class P2P extends JFrame {
 	        } else if (event.getSource() == aboutMenuItem)
 				JOptionPane.showMessageDialog(P2P.this, "Name : Enes Mahmut\nSurname : ATES\nSchool Number : 20200702008\n"
 						+ "Email : enesmahmut.ates@std.yeditepe.edu.tr", "Developer Information", JOptionPane.INFORMATION_MESSAGE, icon);
-		}	
+		}
 	}
 
 	public void setPercentage(int index, double l) {

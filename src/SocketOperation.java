@@ -34,7 +34,9 @@ public class SocketOperation {
     private static final int    			TCP_PORT = 8080;
     private static final String 			BROADCAST_ADDRESS = "255.255.255.255";
     private static final int				CHUNK_SIZE = 256 * 1024;
+	public static Gson                		gson = new Gson();
 	public static DefaultListModel<String>	listModel1;
+	public static DefaultListModel<String>	listModel2;
     private ExecutorService 				threadPool = Executors.newCachedThreadPool();
     private final ReentrantLock 			uploadLock = new ReentrantLock();
     private final ReentrantLock 			runningLock = new ReentrantLock();
@@ -47,7 +49,6 @@ public class SocketOperation {
     private byte[]              			buffer = new byte[65507];
     private DatagramPacket      			packet = new DatagramPacket(buffer, buffer.length);
     private boolean			    			running;
-    private Gson                			gson = new Gson();
     private P2P				    			p2p;
     private int								uploadThreadNum = 0;
     private InetAddress						broadcastAddress;
@@ -130,6 +131,9 @@ public class SocketOperation {
     	int 		control;
     	int			targetID;
     	InetAddress	targetAddress;
+		ArrayList<String> filter = new ArrayList<>();
+		for (int i = 0; i < listModel2.size(); i++)
+			filter.add(listModel2.get(i));
     	x: while (downloadedBytes != totalByte) {
     		confirmLock.lock();
 	    	confirmIDControlList.set(id, null);
@@ -140,7 +144,7 @@ public class SocketOperation {
     			throw new IOException();
     		}
 	    	try {
-	    		sendMessage("CONTROL " + downloadedBytes + ";" + id + ";" + fileInfo);
+	    		sendMessage("CONTROL " + downloadedBytes + ";" + id + ";" + fileInfo + ";" + gson.toJson(filter));
 	    		runningLock.unlock();
 	    	} catch(IOException err) {
 	    		runningLock.unlock();
@@ -166,7 +170,7 @@ public class SocketOperation {
 	    	}
 	    	targetID = si.getNum();
 	    	targetAddress = si.getAddress();
-			
+
     		runningLock.lock();
     		if (!this.running) {
     			runningLock.unlock();
@@ -190,7 +194,7 @@ public class SocketOperation {
 	    	}
 	    	byte[]	buffer = downloadIDControlList.get(id);
 	    	downloadLock.unlock();
-	    	if (readedBytes + buffer.length > targetByteCount) {
+	    	if (buffer.length > targetByteCount - readedBytes) {
 		    	while (true) {
 		    		fos.write(buffer, 0, (int) (targetByteCount - readedBytes));
 		    		fos.close();
@@ -208,6 +212,7 @@ public class SocketOperation {
 			        	targetByteCount = newTargetByteCount;
 			        	break;
 		        	}
+					downloadedBytes += (targetByteCount - readedBytes);
 		        	buffer = Arrays.copyOfRange(buffer, (int) (targetByteCount - readedBytes), (int) buffer.length);
 		        	readedBytes = 0;
 		        	targetByteCount = newTargetByteCount;
@@ -232,7 +237,7 @@ public class SocketOperation {
 
         senderSocket.send(packet);
     }
-    
+
     private void sendPrivateMessage(String message, InetAddress address) throws IOException {
     	byte[] buffer = message.getBytes();
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length,
@@ -245,25 +250,28 @@ public class SocketOperation {
         try {
         	senderSocket = new DatagramSocket();
         	senderSocket.setBroadcast(true);
-        	
+
         	runningLock.lock();
             x: while (running) {
             	runningLock.unlock();
             	shareFolderLock.lock();
                 String sharedFolder = p2p.getSharedFolder();
                 if (!sharedFolder.equals("")) {
-                    File folder = new File(sharedFolder);
-                    Path baseFolderPath = folder.toPath();
-                    File[] files = folder.listFiles();
-                    StringBuilder sb = new StringBuilder();
-					StringBuilder sb1 = new StringBuilder();
-                    StringBuilder sb2 = new StringBuilder();
-                    StringBuilder sb3 = new StringBuilder();
-                    for (File file : files) {
-						if (file.isDirectory() && listModel1.contains(baseFolderPath.relativize(file.toPath()).toString()))
-							continue;
+                    File			folder = new File(sharedFolder);
+                    Path			baseFolderPath = folder.toPath();
+                    List<File>		files = FolderOperation.getAllFilesAndFolders(folder);
+                    StringBuilder	sb = new StringBuilder();
+					StringBuilder	sb1 = new StringBuilder();
+                    StringBuilder	sb2 = new StringBuilder();
+                    StringBuilder	sb3 = new StringBuilder();
+					String			path;
+                    y: for (File file : files) {
+						path = baseFolderPath.relativize(file.toPath()).toString();
+						for (int i = 0; i < listModel1.size(); i++)
+							if (path.equals(listModel1.getElementAt(i)) || path.startsWith(listModel1.getElementAt(i) + "/"))
+								continue y;
                         try {
-                            String jsonData = gson.toJson(FolderOperation.getAllFileInformations(baseFolderPath, file));
+                            String jsonData = gson.toJson(FolderOperation.getAllFileInformations(baseFolderPath, file, null));
 							sb1.append(baseFolderPath.relativize(file.toPath()).toString());
                         	sb1.append(',');
                             sb2.append(FolderOperation.totalnumOfBytes);
@@ -302,7 +310,7 @@ public class SocketOperation {
             	e.printStackTrace();
         }
     }
-    
+
     private void tcpReceiver() {
     	try {
     		Socket					clientSocket;
@@ -331,7 +339,7 @@ public class SocketOperation {
     	        while (buffer[index] != ' ')
     	        	id = id * 10 + buffer[index++] - '0';
     	        downloadLock.lock();
-                downloadIDControlList.set(id, Arrays.copyOfRange(buffer, index + 1, buffer.length)); 
+                downloadIDControlList.set(id, Arrays.copyOfRange(buffer, index + 1, buffer.length));
                 downloadLock.unlock();
                 runningLock.lock();
     		}
@@ -347,7 +355,7 @@ public class SocketOperation {
     private void udpReceiver() {
         try {
 			udpReceiverSocket = new DatagramSocket(UDP_PORT);
-			
+
 			runningLock.lock();
             x: while (running) {
             	runningLock.unlock();
@@ -369,15 +377,20 @@ public class SocketOperation {
                     	continue ;
                     }
                     shareFolderLock.lock();
-                    File folder = new File(sharedFolder);
-                    Path baseFolderPath = folder.toPath();
-                    File[] files = folder.listFiles();
-                    String[] receivedMessageSplit = receivedMessage.split(";");
-                    for (File file : files) {
-						if (file.isDirectory() && listModel1.contains(baseFolderPath.relativize(file.toPath()).toString()))
-							continue;
+                    File		folder = new File(sharedFolder);
+                    Path		baseFolderPath = folder.toPath();
+                    List<File>	files = FolderOperation.getAllFilesAndFolders(folder);
+                    String[]	receivedMessageSplit = receivedMessage.split(";");
+					String		path;
+					@SuppressWarnings("unchecked")
+					ArrayList<String>	filter = gson.fromJson(receivedMessageSplit[3], ArrayList.class);
+                    y: for (File file : files) {
+						path = baseFolderPath.relativize(file.toPath()).toString();
+						for (int i = 0; i < listModel1.size(); i++)
+							if (path.equals(listModel1.getElementAt(i)) || path.startsWith(listModel1.getElementAt(i) + "/"))
+								continue y;
                         try {
-                        	List<List<String>> getAllFileInformations = FolderOperation.getAllFileInformations(baseFolderPath, file);
+                        	List<List<String>> getAllFileInformations = FolderOperation.getAllFileInformations(baseFolderPath, file, filter);
                             if (getAllFileInformations.get(2).equals(gson.fromJson(receivedMessageSplit[2], List.class).get(2))) {
                             	ArrayList<byte[]>	bytes = FolderOperation.bytes;
                             	uploadLock.lock();
@@ -482,7 +495,7 @@ class SmallInformation {
 		this.address = address;
 		this.dowloadedBytes = dowloadedBytes;
 	}
-	
+
 	public int getNum() {
 		return num;
 	}
